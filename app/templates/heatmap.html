@@ -1,0 +1,863 @@
+{% extends "base.html" %}
+{% block title %}Heatmap{% endblock %}
+{% block page_title %}<i class="fa-solid fa-fire" style="color:var(--primary);margin-right:8px"></i>Heatmap{% endblock %}
+{% block chartjs %}{% endblock %}
+
+{% block head %}
+<style>
+  /* ── Page wrapper — centred ── */
+  .hm-page {
+    flex: 1; display: flex; align-items: flex-start; justify-content: center;
+    padding: 28px 24px; overflow-y: auto; min-height: 0;
+  }
+
+  /* ── Selection card ── */
+  .hm-card {
+    width: 100%; max-width: 680px;
+    background: var(--card); border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 12px rgba(0,0,0,.06);
+    overflow: hidden;
+  }
+  .hm-card-head {
+    padding: 18px 24px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .hm-card-head-title {
+    font-size: 15px; font-weight: 700; color: var(--text);
+  }
+  .hm-card-head-sub {
+    font-size: 12px; color: var(--muted); margin-left: auto;
+  }
+
+  .hm-section { padding: 18px 24px; border-bottom: 1px solid var(--border); }
+  .hm-section:last-child { border-bottom: none; }
+
+  .hm-sec-label {
+    font-size: 10px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.8px;
+    margin-bottom: 11px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .hm-sec-label i { font-size: 10px; opacity: 0.7; }
+
+  /* Camera chips — single select */
+  .cam-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .cam-chip {
+    padding: 6px 14px; border-radius: 20px; cursor: pointer;
+    font-size: 12.5px; font-weight: 500;
+    border: 1.5px solid var(--border);
+    background: #fff; color: var(--text-2);
+    transition: all .15s; user-select: none;
+  }
+  .cam-chip:hover { border-color: var(--primary); color: var(--primary); }
+  .cam-chip.active {
+    background: var(--primary); border-color: var(--primary);
+    color: #fff; font-weight: 600;
+  }
+
+  /* Date section header */
+  .date-sec-head {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 11px;
+  }
+  .date-sec-head .hm-sec-label { margin-bottom: 0; flex: 1; }
+  .date-count { font-size: 10.5px; color: var(--muted); font-weight: 500; }
+  .date-ctrl-btns { display: flex; gap: 4px; }
+  .date-ctrl-btn {
+    padding: 2px 9px; font-size: 10.5px; font-weight: 600;
+    border: 1px solid var(--border); border-radius: 4px;
+    background: #fff; cursor: pointer; color: var(--muted);
+    font-family: inherit; transition: all .12s;
+  }
+  .date-ctrl-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  /* Date chips — multi select */
+  .date-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .date-chip {
+    padding: 5px 12px; border-radius: 16px; cursor: pointer;
+    font-size: 12px; font-weight: 500;
+    border: 1.5px solid var(--border);
+    background: #fff; color: var(--text-2);
+    transition: all .12s; user-select: none;
+  }
+  .date-chip:hover { border-color: var(--primary); color: var(--primary); }
+  .date-chip.checked {
+    background: var(--primary); border-color: var(--primary); color: #fff;
+  }
+  .date-chip input[type=checkbox] { display: none; }
+
+  /* Hour range */
+  .hour-row { display: flex; align-items: center; gap: 10px; }
+  .hour-input {
+    width: 68px; padding: 7px 10px; font-size: 13px;
+    border: 1.5px solid var(--border); border-radius: 8px;
+    text-align: center; outline: none; font-family: inherit;
+    color: var(--text); transition: border-color .15s;
+    -moz-appearance: textfield;
+  }
+  .hour-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(218,41,28,.1); }
+  .hour-input::-webkit-inner-spin-button,
+  .hour-input::-webkit-outer-spin-button { display: none; }
+  .hour-sep { font-size: 16px; color: var(--border); }
+  .hour-unit { font-size: 12px; color: var(--muted); }
+
+  /* Render button */
+  .hm-render-btn {
+    width: 100%; padding: 12px 16px;
+    background: var(--primary); color: #fff;
+    border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    transition: background .15s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .hm-render-btn:hover { background: var(--primary-dark); }
+
+  /* ══════════════════════════════════
+     MODAL
+     ══════════════════════════════════ */
+  .hm-modal-overlay {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+    opacity: 0; pointer-events: none;
+    transition: opacity .2s;
+  }
+  .hm-modal-overlay.open {
+    opacity: 1; pointer-events: all;
+  }
+  .hm-modal {
+    width: min(1180px, 100%); height: min(760px, 100%);
+    background: #111;
+    border-radius: 12px; overflow: hidden;
+    display: flex; flex-direction: column;
+    transform: scale(.97); transition: transform .2s;
+    box-shadow: 0 24px 80px rgba(0,0,0,.6);
+  }
+  .hm-modal-overlay.open .hm-modal { transform: scale(1); }
+
+  /* Modal toolbar (top) */
+  .hm-modal-toolbar {
+    background: #1a1a1a; border-bottom: 1px solid #333;
+    padding: 10px 16px;
+    display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  }
+  .hm-modal-title {
+    font-size: 13px; font-weight: 600; color: #e5e7eb;
+    white-space: nowrap; margin-right: 4px;
+  }
+  .hm-modal-divider {
+    width: 1px; height: 20px; background: #333; flex-shrink: 0;
+  }
+
+  /* In-modal type toggles */
+  .modal-type-wrap { display: flex; gap: 5px; }
+  .modal-type-chip {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 14px; cursor: pointer;
+    font-size: 11.5px; font-weight: 600; user-select: none;
+    border: 1.5px solid #333; color: #888;
+    transition: all .15s;
+  }
+  .modal-type-chip .mdot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; opacity: 0.4;
+    transition: opacity .15s;
+  }
+  .modal-type-chip .mcnt { font-size: 10px; color: inherit; opacity: 0.7; }
+  .modal-type-chip.active { border-color: currentColor; }
+  .modal-type-chip.active .mdot { opacity: 1; }
+  .modal-type-chip[data-type=male].active   { color: #60a5fa; }
+  .modal-type-chip[data-type=female].active { color: #f472b6; }
+  .modal-type-chip[data-type=child].active  { color: #fbbf24; }
+  .modal-type-chip[data-type=staff].active  { color: #34d399; }
+
+  /* View mode segmented */
+  .modal-seg {
+    display: flex; border: 1.5px solid #333; border-radius: 7px;
+    overflow: hidden; background: #111;
+  }
+  .modal-seg-btn {
+    flex: 1; padding: 4px 10px; font-size: 11.5px; font-weight: 600;
+    border: none; background: transparent; cursor: pointer;
+    font-family: inherit; color: #777; transition: all .15s;
+    white-space: nowrap;
+  }
+  .modal-seg-btn + .modal-seg-btn { border-left: 1.5px solid #333; }
+  .modal-seg-btn.active { background: var(--primary); color: #fff; }
+
+  /* Close button */
+  .hm-modal-close {
+    margin-left: auto; padding: 4px 10px;
+    background: transparent; border: 1.5px solid #444;
+    border-radius: 6px; color: #aaa; cursor: pointer;
+    font-size: 12px; transition: all .15s; flex-shrink: 0;
+  }
+  .hm-modal-close:hover { background: #333; color: #fff; border-color: #666; }
+
+  /* Canvas area */
+  .hm-modal-canvas-wrap {
+    flex: 1; position: relative; display: flex;
+    align-items: center; justify-content: center;
+    min-height: 0; overflow: hidden; background: #111;
+  }
+  #hmCanvas { max-width: 100%; max-height: 100%; display: block; object-fit: contain; }
+
+  /* Overlay legend */
+  .hm-legend {
+    position: absolute; top: 12px; right: 14px;
+    background: rgba(0,0,0,.65); border-radius: 8px;
+    padding: 8px 12px; display: flex; flex-direction: column; gap: 5px;
+    backdrop-filter: blur(4px);
+  }
+  .hm-legend-row {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 11.5px; font-weight: 500; color: #fff;
+  }
+  .hm-legend-dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+
+  /* Loading */
+  .hm-loading {
+    position: absolute; inset: 0; background: rgba(17,17,17,.85);
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 14px; color: #fff; font-size: 13px;
+    z-index: 10;
+  }
+
+  /* Scrubber bar */
+  .hm-modal-scrubber {
+    background: #1a1a1a; border-top: 1px solid #2a2a2a;
+    padding: 8px 16px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .hm-modal-scrubber input[type=range] {
+    flex: 1; accent-color: var(--primary); cursor: pointer; height: 4px;
+  }
+  .slot-label {
+    font-size: 12px; font-weight: 700; color: var(--primary);
+    min-width: 72px; text-align: center;
+  }
+  .scrub-btn {
+    padding: 4px 10px; border: 1.5px solid #333;
+    border-radius: 6px; background: #111;
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    font-family: inherit; color: #aaa;
+    transition: all .15s; white-space: nowrap;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .scrub-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .scrub-btn.play-active { background: var(--primary); color: #fff; border-color: var(--primary); }
+  .slot-count { font-size: 11px; color: #666; white-space: nowrap; }
+
+  /* Stats bar */
+  .hm-modal-stats {
+    background: #161616; border-top: 1px solid #2a2a2a;
+    padding: 8px 16px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 0;
+  }
+  .stat-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 16px; border-right: 1px solid #2a2a2a;
+  }
+  .stat-pill:first-child { padding-left: 0; }
+  .stat-pill:last-child  { border-right: none; }
+  .stat-pill .sp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .stat-pill .sp-lbl { font-size: 11px; color: #888; }
+  .stat-pill .sp-val { font-size: 13px; font-weight: 700; color: #e5e7eb; }
+  .stat-total-pill {
+    margin-left: auto; padding: 2px 12px;
+    background: #222; border-radius: 20px;
+    font-size: 12px; font-weight: 700; color: #e5e7eb;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- ── Centred selection card ── -->
+<div class="hm-page">
+  <div class="hm-card">
+
+    <!-- Card header -->
+    <div class="hm-card-head">
+      <i class="fa-solid fa-fire" style="color:var(--primary);font-size:15px;"></i>
+      <span class="hm-card-head-title">Heatmap Viewer</span>
+      <span class="hm-card-head-sub">Select options below, then click Load &amp; Render</span>
+    </div>
+
+    <!-- Camera section -->
+    <div class="hm-section">
+      <div class="hm-sec-label"><i class="fa-solid fa-video"></i> Camera / Location</div>
+      <div class="cam-chips" id="cameraChips">
+        <div class="cam-chip active" data-cam="ChannelNo02" onclick="selectCamera(this)">Cosmetics (Ch 02)</div>
+        <div class="cam-chip" data-cam="ChannelNo03" onclick="selectCamera(this)">Alcohol (Ch 03)</div>
+        <div class="cam-chip" data-cam="ChannelNo05" onclick="selectCamera(this)">Alcohol &amp; Perfumes (Ch 05)</div>
+        <div class="cam-chip" data-cam="ChannelNo06" onclick="selectCamera(this)">Alcohol (Ch 06)</div>
+        <div class="cam-chip" data-cam="ChannelNo07" onclick="selectCamera(this)">Alcohol (Ch 07)</div>
+        <div class="cam-chip" data-cam="ChannelNo15" onclick="selectCamera(this)">Bags (Ch 15)</div>
+        <div class="cam-chip" data-cam="ChannelNo16" onclick="selectCamera(this)">Confectionaries (Ch 16)</div>
+      </div>
+    </div>
+
+    <!-- Dates section -->
+    <div class="hm-section">
+      <div class="date-sec-head">
+        <div class="hm-sec-label"><i class="fa-solid fa-calendar-days"></i> Date</div>
+        <span class="date-count" id="dateCountLabel">—</span>
+        <div class="date-ctrl-btns">
+          <button class="date-ctrl-btn" onclick="selectAllDates(true)">All</button>
+          <button class="date-ctrl-btn" onclick="selectAllDates(false)">None</button>
+        </div>
+      </div>
+      <div class="date-chips" id="dateList">
+        <div class="spinner" style="width:16px;height:16px;border-width:2px;margin:0;"></div>
+      </div>
+    </div>
+
+    <!-- Hour range section -->
+    <div class="hm-section">
+      <div class="hm-sec-label"><i class="fa-regular fa-clock"></i> Hour Range</div>
+      <div class="hour-row">
+        <input class="hour-input" type="number" id="hourFrom" value="0"  min="0" max="23" placeholder="00"/>
+        <span class="hour-sep">—</span>
+        <input class="hour-input" type="number" id="hourTo"   value="23" min="0" max="23" placeholder="23"/>
+        <span class="hour-unit">hrs</span>
+      </div>
+    </div>
+
+    <!-- Render button section -->
+    <div class="hm-section">
+      <button class="hm-render-btn" onclick="loadAndRender()">
+        <i class="fa-solid fa-play" style="font-size:11px;"></i> Load &amp; Render
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── Heatmap Modal ── -->
+<div class="hm-modal-overlay" id="hmModal">
+  <div class="hm-modal">
+
+    <!-- Toolbar -->
+    <div class="hm-modal-toolbar">
+      <i class="fa-solid fa-fire" style="color:var(--primary);font-size:12px;flex-shrink:0;"></i>
+      <div class="hm-modal-title" id="hmModalTitle">Heatmap</div>
+
+      <div class="hm-modal-divider"></div>
+
+      <!-- Person type toggles -->
+      <div class="modal-type-wrap" id="typeToggles">
+        <div class="modal-type-chip active" data-type="male" onclick="toggleType(this)">
+          <div class="mdot" style="background:#60a5fa;"></div>
+          Male <span class="mcnt" id="cnt-male">—</span>
+        </div>
+        <div class="modal-type-chip active" data-type="female" onclick="toggleType(this)">
+          <div class="mdot" style="background:#f472b6;"></div>
+          Female <span class="mcnt" id="cnt-female">—</span>
+        </div>
+        <div class="modal-type-chip active" data-type="child" onclick="toggleType(this)">
+          <div class="mdot" style="background:#fbbf24;"></div>
+          Child <span class="mcnt" id="cnt-child">—</span>
+        </div>
+        <div class="modal-type-chip active" data-type="staff" onclick="toggleType(this)">
+          <div class="mdot" style="background:#34d399;"></div>
+          Staff <span class="mcnt" id="cnt-staff">—</span>
+        </div>
+      </div>
+
+      <div class="hm-modal-divider"></div>
+
+      <!-- View mode -->
+      <div class="modal-seg">
+        <button class="modal-seg-btn active" id="modeHeatmap" onclick="setMode('heatmap')">
+          <i class="fa-solid fa-fire" style="font-size:10px;"></i> Heatmap
+        </button>
+        <button class="modal-seg-btn" id="modeBboxes" onclick="setMode('bboxes')">
+          <i class="fa-regular fa-square" style="font-size:10px;"></i> Detections
+        </button>
+      </div>
+
+      <button class="hm-modal-close" onclick="closeHeatmapModal()">
+        <i class="fa-solid fa-xmark" style="font-size:11px;"></i> Close
+      </button>
+    </div>
+
+    <!-- Canvas area -->
+    <div class="hm-modal-canvas-wrap" id="canvasWrap">
+      <canvas id="hmCanvas"></canvas>
+
+      <div class="hm-legend" id="hmLegend" style="display:none;">
+        <div class="hm-legend-row"><div class="hm-legend-dot" style="background:#60a5fa;"></div>Male</div>
+        <div class="hm-legend-row"><div class="hm-legend-dot" style="background:#f472b6;"></div>Female</div>
+        <div class="hm-legend-row"><div class="hm-legend-dot" style="background:#fbbf24;"></div>Child</div>
+        <div class="hm-legend-row"><div class="hm-legend-dot" style="background:#34d399;"></div>Staff</div>
+      </div>
+
+      <div class="hm-loading" id="hmLoading" style="display:none;">
+        <div class="spinner" style="border:3px solid rgba(255,255,255,.15);border-top-color:var(--primary);border-radius:50%;width:40px;height:40px;animation:spin .8s linear infinite;"></div>
+        <span id="loadingMsg">Loading data…</span>
+      </div>
+    </div>
+
+    <!-- Scrubber -->
+    <div class="hm-modal-scrubber" id="hmScrubber" style="display:none;">
+      <button class="scrub-btn" id="playBtn" onclick="togglePlay()">
+        <i class="fa-solid fa-play" id="playIcon" style="font-size:9px;"></i>
+        <span id="playLabel">Play</span>
+      </button>
+      <button class="scrub-btn" onclick="showAllFrames()" title="Show all time slots aggregated">
+        <i class="fa-solid fa-layer-group" style="font-size:9px;"></i> All
+      </button>
+      <input type="range" id="timeSlider" min="0" value="0" oninput="onSliderChange()"/>
+      <div class="slot-label" id="slotLabel">—</div>
+      <div class="slot-count" id="slotCount"></div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="hm-modal-stats" id="statsPanel" style="display:none;">
+      <div class="stat-pill">
+        <div class="sp-dot" style="background:#60a5fa;"></div>
+        <span class="sp-lbl">Male</span>
+        <span class="sp-val" id="stat-male">—</span>
+      </div>
+      <div class="stat-pill">
+        <div class="sp-dot" style="background:#f472b6;"></div>
+        <span class="sp-lbl">Female</span>
+        <span class="sp-val" id="stat-female">—</span>
+      </div>
+      <div class="stat-pill">
+        <div class="sp-dot" style="background:#fbbf24;"></div>
+        <span class="sp-lbl">Child</span>
+        <span class="sp-val" id="stat-child">—</span>
+      </div>
+      <div class="stat-pill">
+        <div class="sp-dot" style="background:#34d399;"></div>
+        <span class="sp-lbl">Staff</span>
+        <span class="sp-val" id="stat-staff">—</span>
+      </div>
+      <div class="stat-total-pill" id="stat-total">—</div>
+      <div style="margin-left:12px;font-size:11px;color:#555;" id="frameCount"></div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Constants ──
+const TYPE_COLORS = {
+  male:   { fill: 'rgba(96,165,250,0.35)',  stroke: '#60a5fa' },
+  female: { fill: 'rgba(244,114,182,0.35)', stroke: '#f472b6' },
+  child:  { fill: 'rgba(251,191,36,0.40)',  stroke: '#fbbf24' },
+  staff:  { fill: 'rgba(52,211,153,0.35)',  stroke: '#34d399' },
+};
+const NATIVE_W = 640, NATIVE_H = 360;
+const HEAT_W   = 160, HEAT_H   = 90;
+const HEAT_SX  = HEAT_W / NATIVE_W, HEAT_SY = HEAT_H / NATIVE_H;
+
+// ── State ──
+let selectedCamera = 'ChannelNo02';
+let allFrames      = [];
+let bgImage        = null;
+let currentMode    = 'heatmap';
+let activeTypes    = new Set(['male','female','child','staff']);
+let currentSlot    = 0;
+let playTimer      = null;
+let isPlaying      = false;
+
+// ── Init ──
+window.addEventListener('DOMContentLoaded', () => {
+  loadDates('ChannelNo02');
+});
+window.addEventListener('resize', () => {
+  if (bgImage && allFrames.length) requestAnimationFrame(() => renderCurrentView());
+});
+
+// ── Camera chips ──
+function selectCamera(el) {
+  document.querySelectorAll('.cam-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  selectedCamera = el.dataset.cam;
+  loadDates(selectedCamera);
+}
+
+// ── Date chips ──
+async function loadDates(camera) {
+  const list = document.getElementById('dateList');
+  list.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;margin:0;"></div>';
+  try {
+    const res  = await fetch(`/api/heatmap-dates?camera=${camera}`);
+    const data = await res.json();
+    list.innerHTML = '';
+    (data.dates || []).forEach(d => {
+      const chip = document.createElement('label');
+      chip.className = 'date-chip checked';
+      chip.innerHTML = `<input type="checkbox" value="${d}" checked/>${formatDate(d)}`;
+      chip.querySelector('input').addEventListener('change', updateDateCount);
+      list.appendChild(chip);
+    });
+    updateDateCount();
+  } catch(e) {
+    list.innerHTML = '<span style="font-size:12px;color:var(--muted);">Failed to load dates.</span>';
+  }
+}
+
+function formatDate(d) {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const [, m, day] = d.split('-');
+  return `${months[parseInt(m)-1]} ${parseInt(day)}`;
+}
+
+function selectAllDates(checked) {
+  document.querySelectorAll('#dateList input[type=checkbox]').forEach(cb => {
+    cb.checked = checked;
+    cb.closest('.date-chip').classList.toggle('checked', checked);
+  });
+  updateDateCount();
+}
+
+function updateDateCount() {
+  document.querySelectorAll('#dateList .date-chip').forEach(chip => {
+    chip.classList.toggle('checked', chip.querySelector('input').checked);
+  });
+  const total   = document.querySelectorAll('#dateList input[type=checkbox]').length;
+  const checked = document.querySelectorAll('#dateList input[type=checkbox]:checked').length;
+  document.getElementById('dateCountLabel').textContent =
+    checked === 0     ? `0 of ${total} selected` :
+    checked === total ? `All ${total} selected`  :
+    `${checked} of ${total} selected`;
+}
+
+function getSelectedDates() {
+  return Array.from(document.querySelectorAll('#dateList input[type=checkbox]:checked'))
+    .map(cb => cb.value);
+}
+
+// ── Modal open / close ──
+function openHeatmapModal() {
+  document.getElementById('hmModal').classList.add('open');
+}
+function closeHeatmapModal() {
+  document.getElementById('hmModal').classList.remove('open');
+  if (isPlaying) {
+    clearInterval(playTimer); isPlaying = false;
+    document.getElementById('playIcon').className    = 'fa-solid fa-play';
+    document.getElementById('playLabel').textContent = 'Play';
+    document.getElementById('playBtn').classList.remove('play-active');
+  }
+}
+// Close on backdrop click
+document.getElementById('hmModal').addEventListener('click', function(e) {
+  if (e.target === this) closeHeatmapModal();
+});
+
+// ── Person type toggle ──
+function toggleType(el) {
+  const t = el.dataset.type;
+  el.classList.toggle('active');
+  if (activeTypes.has(t)) activeTypes.delete(t);
+  else activeTypes.add(t);
+  if (allFrames.length) renderCurrentView();
+}
+
+// ── View mode ──
+function setMode(m) {
+  currentMode = m;
+  document.getElementById('modeHeatmap').classList.toggle('active', m === 'heatmap');
+  document.getElementById('modeBboxes').classList.toggle('active', m === 'bboxes');
+  if (allFrames.length) renderCurrentView();
+}
+
+// ── Load & Render ──
+async function loadAndRender() {
+  const dates    = getSelectedDates();
+  const hourFrom = document.getElementById('hourFrom').value;
+  const hourTo   = document.getElementById('hourTo').value;
+
+  if (dates.length === 0) { alert('Please select at least one date.'); return; }
+
+  // Update modal title
+  const camLabel = document.querySelector('.cam-chip.active')?.textContent || selectedCamera;
+  document.getElementById('hmModalTitle').textContent =
+    `${camLabel}  ·  ${dates.length === 1 ? formatDate(dates[0]) : dates.length + ' dates'}`;
+
+  openHeatmapModal();
+  setLoading(true, 'Loading heatmap data…');
+
+  // Reset state
+  allFrames = [];
+  bgImage   = null;
+  document.getElementById('hmScrubber').style.display = 'none';
+  document.getElementById('statsPanel').style.display = 'none';
+  document.getElementById('hmLegend').style.display   = 'none';
+
+  try {
+    const res = await fetch(
+      `/api/heatmap-data?camera=${selectedCamera}&dates=${dates.join(',')}&hour_from=${hourFrom}&hour_to=${hourTo}`
+    );
+    const data = await res.json();
+
+    if (!data.frames || data.frames.length === 0) {
+      setLoading(false, 'No data found for selected filters.');
+      return;
+    }
+
+    allFrames   = data.frames;
+    currentSlot = allFrames.length - 1;
+    updateStats(data.total, data.frames.length);
+
+    setLoading(true, 'Loading background image…');
+    bgImage = await loadImage(`/static/img/heatmap/${data.image}.jpg`);
+
+    setLoading(false);
+    setupScrubber();
+    requestAnimationFrame(() => renderCurrentView());
+
+  } catch(e) {
+    console.error(e);
+    setLoading(false, 'Failed to load data.');
+  }
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload  = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// ── Scrubber ──
+function setupScrubber() {
+  const slider = document.getElementById('timeSlider');
+  slider.min   = 0;
+  slider.max   = allFrames.length - 1;
+  slider.value = currentSlot;
+  document.getElementById('hmScrubber').style.display = 'flex';
+  updateSlotLabel();
+  updateFrameCounts(currentSlot);
+}
+
+function onSliderChange() {
+  currentSlot = parseInt(document.getElementById('timeSlider').value);
+  updateSlotLabel();
+  updateFrameCounts(currentSlot);
+  if (currentMode === 'bboxes') renderBboxes(currentSlot);
+  else renderCurrentView();
+}
+
+function updateSlotLabel() {
+  const f = allFrames[currentSlot];
+  document.getElementById('slotLabel').textContent = f ? f.time : '—';
+  document.getElementById('slotCount').textContent = allFrames.length + ' slots';
+}
+
+function showAllFrames() {
+  if (isPlaying) stopPlay();
+  currentSlot = allFrames.length - 1;
+  document.getElementById('timeSlider').value = currentSlot;
+  updateSlotLabel(); updateFrameCounts(currentSlot);
+  if (currentMode === 'heatmap') renderHeatmapAll();
+  else renderBboxes(currentSlot);
+}
+
+function stopPlay() {
+  clearInterval(playTimer); isPlaying = false;
+  document.getElementById('playIcon').className    = 'fa-solid fa-play';
+  document.getElementById('playLabel').textContent = 'Play';
+  document.getElementById('playBtn').classList.remove('play-active');
+}
+
+function togglePlay() {
+  if (isPlaying) {
+    stopPlay();
+  } else {
+    isPlaying = true;
+    document.getElementById('playIcon').className    = 'fa-solid fa-pause';
+    document.getElementById('playLabel').textContent = 'Pause';
+    document.getElementById('playBtn').classList.add('play-active');
+    playTimer = setInterval(() => {
+      currentSlot = (currentSlot + 1) % allFrames.length;
+      document.getElementById('timeSlider').value = currentSlot;
+      updateSlotLabel(); updateFrameCounts(currentSlot);
+      if (currentMode === 'bboxes') renderBboxes(currentSlot);
+      else renderHeatmapUpTo(currentSlot);
+    }, 600);
+  }
+}
+
+// ── Render ──
+function renderCurrentView() {
+  if (!bgImage || !allFrames.length) return;
+  document.getElementById('hmLegend').style.display = 'flex';
+  if (currentMode === 'heatmap') renderHeatmapAll();
+  else renderBboxes(currentSlot);
+}
+
+function getCanvas() {
+  const wrap = document.getElementById('canvasWrap');
+  const canvas = document.getElementById('hmCanvas');
+  const ww = wrap.clientWidth  || 800;
+  const wh = wrap.clientHeight || 450;
+  const scale = Math.min(ww / NATIVE_W, wh / NATIVE_H);
+  canvas.width  = Math.round(NATIVE_W * scale);
+  canvas.height = Math.round(NATIVE_H * scale);
+  return { canvas, ctx: canvas.getContext('2d'), scale };
+}
+
+function drawBg(ctx, canvas) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
+}
+
+function renderHeatmapAll()         { renderHeatmapFrames(allFrames); }
+function renderHeatmapUpTo(slotIdx) { renderHeatmapFrames(allFrames.slice(0, slotIdx + 1)); }
+
+function renderHeatmapFrames(frames) {
+  const { canvas, ctx } = getCanvas();
+  drawBg(ctx, canvas);
+
+  const grid = {};
+  for (const t of activeTypes) grid[t] = new Float32Array(HEAT_W * HEAT_H);
+
+  for (const frame of frames) {
+    for (const t of activeTypes) {
+      const boxes = frame.bboxes?.[t] || [];
+      const g = grid[t];
+      for (const [x1, y1, x2, y2] of boxes) {
+        const cx    = (x1 + x2) / 2 * HEAT_SX;
+        const cy    = (y1 + y2) / 2 * HEAT_SY;
+        const sigma = Math.max((x2-x1)*HEAT_SX, (y2-y1)*HEAT_SY) * 0.45;
+        if (sigma < 0.4) continue;
+        const inv2s2 = 1 / (2 * sigma * sigma);
+        const r   = Math.ceil(sigma * 3.0);
+        const gx1 = Math.max(0, Math.floor(cx - r));
+        const gy1 = Math.max(0, Math.floor(cy - r));
+        const gx2 = Math.min(HEAT_W, Math.ceil(cx + r));
+        const gy2 = Math.min(HEAT_H, Math.ceil(cy + r));
+        for (let gy = gy1; gy < gy2; gy++) {
+          const dy2 = (gy - cy) * (gy - cy);
+          for (let gx = gx1; gx < gx2; gx++) {
+            g[gy * HEAT_W + gx] += Math.exp(-((gx-cx)*(gx-cx) + dy2) * inv2s2);
+          }
+        }
+      }
+    }
+  }
+
+  // Find the 99th-percentile cap across all active grids
+  const allVals = [];
+  for (const t of activeTypes) {
+    const g = grid[t];
+    for (let i = 0; i < g.length; i++) { if (g[i] > 0) allVals.push(g[i]); }
+  }
+  if (allVals.length === 0) return;
+  allVals.sort((a, b) => a - b);
+  const capVal    = allVals[Math.min(Math.floor(allVals.length * 0.99), allVals.length - 1)];
+  // Log-scale normalisation: stretches variation when the grid is heavily saturated
+  const logCapVal = Math.log1p(capVal);
+
+  const offscreen = document.createElement('canvas');
+  offscreen.width = HEAT_W; offscreen.height = HEAT_H;
+  const octx = offscreen.getContext('2d');
+  const imgData = octx.createImageData(HEAT_W, HEAT_H);
+
+  for (let py = 0; py < HEAT_H; py++) {
+    for (let px = 0; px < HEAT_W; px++) {
+      const idx = py * HEAT_W + px;
+      let totalHeat = 0, rAcc = 0, gAcc = 0, bAcc = 0, activeCount = 0;
+      for (const t of activeTypes) {
+        const raw = Math.min(1, Math.log1p(grid[t][idx]) / logCapVal);
+        if (raw === 0) continue;
+        activeCount++;
+        const heat = Math.pow(raw, 0.7);  // gentle gamma — low-traffic areas still faintly visible
+        const [tr, tg, tb] = heatColor(heat);
+        const typeRgb = typeBaseRgb(t);
+        rAcc += typeRgb[0] * 0.2 + tr * 0.8;
+        gAcc += typeRgb[1] * 0.2 + tg * 0.8;
+        bAcc += typeRgb[2] * 0.2 + tb * 0.8;
+        totalHeat += heat;
+      }
+      if (activeCount > 0) {
+        const avgHeat = totalHeat / activeCount;
+        imgData.data[idx*4]   = Math.round(rAcc / activeCount);
+        imgData.data[idx*4+1] = Math.round(gAcc / activeCount);
+        imgData.data[idx*4+2] = Math.round(bAcc / activeCount);
+        imgData.data[idx*4+3] = Math.min(252, Math.round(avgHeat * 252));  // transparent at 0, opaque at max
+      }
+    }
+  }
+  octx.putImageData(imgData, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(offscreen, 0, 0, canvas.width, canvas.height);
+}
+
+function heatColor(t) {
+  t = Math.max(0, Math.min(1, t));
+  if (t < 0.25) { const f = t/0.25;       return [0,              Math.round(255*f), 255]; }
+  if (t < 0.5)  { const f = (t-0.25)/0.25; return [0,              255,               Math.round(255*(1-f))]; }
+  if (t < 0.75) { const f = (t-0.5)/0.25;  return [Math.round(255*f), 255,            0]; }
+  const f = (t-0.75)/0.25;               return [255,            Math.round(255*(1-f)), 0];
+}
+
+function typeBaseRgb(t) {
+  return { male:[96,165,250], female:[244,114,182], child:[251,191,36], staff:[52,211,153] }[t] || [128,128,128];
+}
+
+function renderBboxes(slotIdx) {
+  const { canvas, ctx, scale } = getCanvas();
+  drawBg(ctx, canvas);
+  const frame = allFrames[slotIdx];
+  if (!frame) return;
+  ctx.lineWidth = Math.max(1.5, scale);
+  ctx.font = `bold ${Math.round(10*scale)}px Inter,sans-serif`;
+  for (const t of activeTypes) {
+    const boxes  = frame.bboxes?.[t] || [];
+    const colors = TYPE_COLORS[t];
+    ctx.fillStyle = colors.fill; ctx.strokeStyle = colors.stroke;
+    for (const [x1,y1,x2,y2] of boxes) {
+      const cx1=x1*scale, cy1=y1*scale, cw=(x2-x1)*scale, ch=(y2-y1)*scale;
+      ctx.fillRect(cx1,cy1,cw,ch); ctx.strokeRect(cx1,cy1,cw,ch);
+    }
+  }
+  ctx.fillStyle = 'rgba(0,0,0,.55)';
+  ctx.fillRect(4, 4, 140*scale, 18*scale);
+  ctx.fillStyle = '#fff'; ctx.textBaseline = 'top';
+  ctx.fillText(`${frame.datetime}`, 8, 7*scale);
+}
+
+// ── Stats ──
+function updateStats(total, frameCount) {
+  const types = ['male','female','child','staff'];
+  let grand = 0;
+  types.forEach(t => {
+    const v = total[t] || 0;
+    grand += v;
+    const el = document.getElementById(`stat-${t}`);
+    if (el) el.textContent = v.toLocaleString();
+  });
+  document.getElementById('stat-total').textContent = `Total: ${grand.toLocaleString()}`;
+  document.getElementById('frameCount').textContent = `${frameCount} slots`;
+  document.getElementById('statsPanel').style.display = 'flex';
+}
+
+function updateFrameCounts(slotIdx) {
+  const frame = allFrames[slotIdx];
+  const c = frame ? frame.count : null;
+  ['male','female','child','staff'].forEach(t => {
+    document.getElementById(`cnt-${t}`).textContent = c ? (c[t] || 0) : '—';
+  });
+}
+
+// ── Loading helper ──
+function setLoading(show, msg) {
+  const el = document.getElementById('hmLoading');
+  el.style.display = show ? 'flex' : 'none';
+  if (msg) document.getElementById('loadingMsg').textContent = msg;
+}
+</script>
+{% endblock %}

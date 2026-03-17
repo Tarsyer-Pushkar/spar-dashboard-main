@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}Device Health{% endblock %}
+{% block page_title %}<i class="fa-solid fa-heart-pulse" style="color:var(--primary);margin-right:8px"></i>Device Health{% endblock %}
+{% block chartjs %}{% endblock %}
+
+{% block content %}
+<div class="content">
+
+  <!-- Summary chips -->
+  <div style="margin-bottom:12px;">
+    <div style="font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">
+      <i class="fa-solid fa-server" style="font-size:10px;"></i> Device Status Summary
+    </div>
+    <div class="chip-row" id="deviceChips">
+      <div class="spinner" style="width:18px;height:18px;border-width:2px;margin:0;"></div>
+    </div>
+  </div>
+
+  <!-- Device cards grid -->
+  <div id="deviceGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+    <div style="grid-column:1/-1;text-align:center;padding:32px;">
+      <div class="spinner" style="margin:0 auto;"></div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function loadDevices() {
+  try {
+    const res = await fetch('/api/devices');
+    const d   = await res.json();
+    renderChips(d.devices);
+    renderCards(d.devices);
+  } catch(e) {
+    document.getElementById('deviceGrid').innerHTML =
+      `<div style="grid-column:1/-1;text-align:center;color:var(--red);padding:20px;">Failed to load device status.</div>`;
+  }
+}
+
+function renderChips(devices) {
+  const online  = devices.filter(d=>d.status==='online').length;
+  const warning = devices.filter(d=>d.status==='warning').length;
+  const offline = devices.filter(d=>d.status==='offline').length;
+  const total   = devices.length;
+
+  let html = `
+    <span class="chip chip-blue"><i class="fa-solid fa-server" style="font-size:10px;"></i> Total Devices: <strong>${total}</strong></span>
+    <span class="chip chip-green"><i class="fa-solid fa-circle-check" style="font-size:10px;"></i> Online: <strong>${online}</strong></span>
+    <span class="chip chip-gold"><i class="fa-solid fa-triangle-exclamation" style="font-size:10px;"></i> Warning: <strong>${warning}</strong></span>
+    <span class="chip chip-red"><i class="fa-solid fa-circle-xmark" style="font-size:10px;"></i> Offline: <strong>${offline}</strong></span>
+  `;
+  document.getElementById('deviceChips').innerHTML = html;
+}
+
+function renderCards(devices) {
+  if (!devices || devices.length === 0) {
+    document.getElementById('deviceGrid').innerHTML =
+      `<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:32px;">No device data available.</div>`;
+    return;
+  }
+
+  const statusConfig = {
+    online:  { dot: 'dot-green',  badge: 'badge-green',  icon: 'fa-circle-check',    label: 'Online',  color: 'var(--green)' },
+    warning: { dot: 'dot-yellow', badge: 'badge-orange', icon: 'fa-triangle-exclamation', label: 'Warning', color: 'var(--yellow)' },
+    offline: { dot: 'dot-red',    badge: 'badge-red',    icon: 'fa-circle-xmark',    label: 'Offline', color: 'var(--red)' },
+  };
+
+  const colLabels = {
+    footfall: { icon: 'fa-users', label: 'Footfall Camera' },
+    alerts:   { icon: 'fa-bell',  label: 'Alert Camera' },
+    heatmap:  { icon: 'fa-fire',  label: 'Heatmap Camera' },
+  };
+
+  let html = '';
+  devices.forEach(dev => {
+    const cfg = statusConfig[dev.status] || statusConfig.offline;
+    const colCfg = colLabels[dev.collection] || { icon: 'fa-camera', label: dev.collection };
+    const shortId = dev.device_id.slice(-8).toUpperCase();
+    const minsAgo = dev.minutes_ago < 9999 ? `${dev.minutes_ago} min ago` : 'Unknown';
+    const borderColor = dev.status === 'online' ? 'var(--green)' : dev.status === 'warning' ? 'var(--yellow)' : 'var(--red)';
+
+    html += `
+      <div class="card" style="border-left:3px solid ${borderColor};">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;">
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px;">
+              <i class="fa-solid ${colCfg.icon}" style="color:var(--primary);margin-right:6px;font-size:12px;"></i>
+              ${colCfg.label}
+            </div>
+            <div style="font-size:11px;color:var(--muted);font-family:monospace;">${escHtml(dev.device_id)}</div>
+          </div>
+          <span class="badge ${cfg.badge}">
+            <i class="fa-solid ${cfg.icon}" style="font-size:9px;"></i> ${cfg.label}
+          </span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+          <div>
+            <div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:2px;">Camera</div>
+            <div style="color:var(--text-2);font-weight:500;">${escHtml(dev.camera||'—')}</div>
+          </div>
+          <div>
+            <div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:2px;">Store</div>
+            <div style="color:var(--text-2);font-weight:500;font-size:11px;">${escHtml(dev.store||'—')}</div>
+          </div>
+          <div>
+            <div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:2px;">Last Seen</div>
+            <div style="color:var(--text-2);font-weight:500;">${escHtml(dev.last_seen||'—')}</div>
+          </div>
+          <div>
+            <div style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.4px;margin-bottom:2px;">Latency</div>
+            <div style="font-weight:600;color:${cfg.color};">${minsAgo}</div>
+          </div>
+        </div>
+
+        <!-- Availability bar -->
+        <div style="margin-top:10px;">
+          <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:3px;">
+            <span>Signal Freshness</span>
+            <span>${dev.status === 'online' ? '✓ Live' : dev.status === 'warning' ? '⚠ Delayed' : '✗ Stale'}</span>
+          </div>
+          <div class="avail-bar">
+            <div class="avail-fill" style="width:${dev.status==='online'?'100':dev.status==='warning'?'60':'15'}%;background:${borderColor};"></div>
+          </div>
+        </div>
+      </div>`;
+  });
+  document.getElementById('deviceGrid').innerHTML = html;
+}
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+loadDevices();
+setInterval(loadDevices, 60000); // refresh every minute
+</script>
+{% endblock %}
