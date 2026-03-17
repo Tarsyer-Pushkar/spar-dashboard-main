@@ -395,39 +395,41 @@ def export_footfall():
 #  HEATMAP DATA
 # ─────────────────────────────────────────────
 
-# Camera → background image, location label, actual MongoDB camera_no value
-# All cameras are in sparServer.heatmap
-CAMERA_MAP = {
-    "ChannelNo02": {"image": "channel_2",  "location": "location1",  "label": "Cosmetics (Ch 02)",         "cam_no": 2},
-    "ChannelNo03": {"image": "channel_3",  "location": "location2",  "label": "Alcohol (Ch 03)",            "cam_no": 3},
-    "ChannelNo05": {"image": "channel_5",  "location": "location3",  "label": "Alcohol & Perfumes (Ch 05)", "cam_no": 5},
-    "ChannelNo06": {"image": "channel_6",  "location": "location4",  "label": "Alcohol (Ch 06)",            "cam_no": 6},
-    "ChannelNo07": {"image": "channel_7",  "location": "location5",  "label": "Alcohol (Ch 07)",            "cam_no": 7},
-    "ChannelNo15": {"image": "channel_15", "location": "location6",  "label": "Bags (Ch 15)",               "cam_no": 15},
-    "ChannelNo16": {"image": "channel_16", "location": "location7",  "label": "Confectionaries (Ch 16)",    "cam_no": 16},
+# store_location → background image filename (without .jpg), section label
+LOCATION_MAP = {
+    "location01": {"image": "location01- FMCG Food",      "label": "FMCG Food"},
+    "location02": {"image": "location02- Grocery",         "label": "Grocery"},
+    "location03": {"image": "location03- Grocery 2",       "label": "Grocery 2"},
+    "location04": {"image": "location04- Home and Living", "label": "Home and Living"},
+    "location05": {"image": "location05- FMCG Food 2",     "label": "FMCG Food 2"},
+    "location06": {"image": "location06- GM- Stationery",  "label": "GM- Stationery"},
+    "location07": {"image": "location07- Dairy and Frozen","label": "Dairy and Frozen"},
+    "location08": {"image": "location08- Cash Counter",    "label": "Cash Counter"},
+    "location09": {"image": "location09- FMCG Non Food",   "label": "FMCG Non Food"},
 }
 
 @api_bp.route("/heatmap-data")
 @login_required_api
 def heatmap_data():
     from collections import OrderedDict
-    camera    = request.args.get("camera", "ChannelNo03")
+    location  = request.args.get("location", "location01")
     hour_from = int(request.args.get("hour_from", 0))
     hour_to   = int(request.args.get("hour_to",  23))
 
-    if camera not in CAMERA_MAP:
-        return jsonify({"error": "Unknown camera"}), 400
+    if location not in LOCATION_MAP:
+        return jsonify({"error": "Unknown location"}), 400
 
-    col    = get_spar_db().heatmap
-    cam_no = CAMERA_MAP[camera]["cam_no"]
+    col = get_spar_db().heatmap
 
     # Accept comma-separated dates or single date (backwards compat)
     dates_param = request.args.get("dates", "") or request.args.get("date", "")
     dates = [d.strip() for d in dates_param.split(",") if d.strip()]
 
     if not dates:
-        latest = col.find_one({"camera_no": cam_no}, sort=[("date_time", -1)])
-        dates = [latest["date_time"][:10]] if latest else ["2026-02-25"]
+        latest = col.find_one({"store_location": location}, sort=[("date_time", -1)])
+        dates = [latest["date_time"][:10]] if latest else []
+        if not dates:
+            return jsonify({"frames": [], "total": {"male": 0, "female": 0, "child": 0, "staff": 0}})
 
     # Build per-date hour-range conditions
     or_conditions = []
@@ -442,9 +444,9 @@ def heatmap_data():
         or_conditions.append({"date_time": {"$gte": tf, "$lt": tt}})
 
     if len(or_conditions) == 1:
-        filt = {"camera_no": cam_no, **or_conditions[0]}
+        filt = {"store_location": location, **or_conditions[0]}
     else:
-        filt = {"camera_no": cam_no, "$or": or_conditions}
+        filt = {"store_location": location, "$or": or_conditions}
 
     docs = list(col.find(
         filt,
@@ -490,29 +492,28 @@ def heatmap_data():
         if not multi:
             slot["datetime"] = doc["date_time"]
 
-    cam_info = CAMERA_MAP[camera]
+    loc_info = LOCATION_MAP[location]
     return jsonify({
-        "camera":    camera,
-        "image":     cam_info["image"],
-        "location":  cam_info["location"],
+        "location":  location,
+        "image":     loc_info["image"],
+        "label":     loc_info["label"],
         "dates":     dates,
         "hour_from": hour_from,
         "hour_to":   hour_to,
         "frames":    list(slots.values()),
         "total":     total,
-        "cameras":   [{"id": k, "label": v["label"]} for k, v in CAMERA_MAP.items()],
+        "locations": [{"id": k, "label": v["label"]} for k, v in LOCATION_MAP.items()],
     })
 
 @api_bp.route("/heatmap-dates")
 @login_required_api
 def heatmap_dates():
-    """Return distinct dates available per camera."""
-    camera = request.args.get("camera", "ChannelNo03")
-    if camera not in CAMERA_MAP:
+    """Return distinct dates available per store location."""
+    location = request.args.get("location", "location01")
+    if location not in LOCATION_MAP:
         return jsonify({"dates": []})
-    col    = get_spar_db().heatmap
-    cam_no = CAMERA_MAP[camera]["cam_no"]
-    docs = list(col.find({"camera_no": cam_no}, {"date_time": 1, "_id": 0}))
+    col  = get_spar_db().heatmap
+    docs = list(col.find({"store_location": location}, {"date_time": 1, "_id": 0}))
     dates = sorted({d["date_time"][:10] for d in docs})
     return jsonify({"dates": dates})
 
