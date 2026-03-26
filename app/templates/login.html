@@ -36,14 +36,17 @@
       display: flex; flex-direction: column; align-items: center; gap: 14px;
     }
     .login-logo-row {
-      display: flex; align-items: center; justify-content: center; gap: 16px;
+      display: flex; align-items: center; justify-content: center; gap: 14px;
     }
-    .login-logo-row img.login-logo-tarsyer {
-      height: 56px;
+    .login-logo-row img {
+      height: 52px;
       background: #fff;
       border-radius: 10px;
       padding: 8px 10px;
       object-fit: contain;
+    }
+    .login-logo-sep {
+      width: 1px; height: 40px; background: rgba(255,255,255,0.3);
     }
     .login-header h2 {
       font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -.2px;
@@ -76,7 +79,11 @@
   <div class="login-box">
     <div class="login-header">
       <div class="login-logo-row">
-        <img src="/static/img/tarsyer.png" class="login-logo-tarsyer" alt="Tarsyer"/>
+        <img src="/static/img/spar.png" alt="SPAR"/>
+        <div class="login-logo-sep"></div>
+        <img src="/static/img/tarsyer.png" alt="Tarsyer"/>
+        <div class="login-logo-sep"></div>
+        <img src="/static/img/surecountai.png" alt="SureCount AI"/>
       </div>
       <h2>SPAR Store Monitor</h2>
       <p>SPAR Retail Dashboard — Tarsyer AI</p>
