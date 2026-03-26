@@ -42,9 +42,13 @@ def str_date_filter(from_str, to_exclusive_str, field="date_time"):
 
 
 def get_hour_range():
-    """Parse hour_from/hour_to query params (0-23), default 9 AM – 10 PM."""
-    hour_from = max(0, min(23, int(request.args.get("hour_from", 9))))
-    hour_to   = max(0, min(23, int(request.args.get("hour_to",  22))))
+    """Parse hour_from/hour_to query params, but strictly bound to 9 AM – 10 PM."""
+    hf = int(request.args.get("hour_from", 9))
+    ht = int(request.args.get("hour_to", 22))
+    hour_from = max(9, min(22, hf))
+    hour_to   = max(9, min(22, ht))
+    if hour_from > hour_to:
+        hour_from, hour_to = 9, 22
     return hour_from, hour_to
 
 
@@ -395,39 +399,41 @@ def export_footfall():
 #  HEATMAP DATA
 # ─────────────────────────────────────────────
 
-# Camera → background image, location label, actual MongoDB camera_no value
-# All cameras are in sparServer.heatmap
-CAMERA_MAP = {
-    "ChannelNo02": {"image": "channel_2",  "location": "location1",  "label": "Cosmetics (Ch 02)",         "cam_no": 2},
-    "ChannelNo03": {"image": "channel_3",  "location": "location2",  "label": "Alcohol (Ch 03)",            "cam_no": 3},
-    "ChannelNo05": {"image": "channel_5",  "location": "location3",  "label": "Alcohol & Perfumes (Ch 05)", "cam_no": 5},
-    "ChannelNo06": {"image": "channel_6",  "location": "location4",  "label": "Alcohol (Ch 06)",            "cam_no": 6},
-    "ChannelNo07": {"image": "channel_7",  "location": "location5",  "label": "Alcohol (Ch 07)",            "cam_no": 7},
-    "ChannelNo15": {"image": "channel_15", "location": "location6",  "label": "Bags (Ch 15)",               "cam_no": 15},
-    "ChannelNo16": {"image": "channel_16", "location": "location7",  "label": "Confectionaries (Ch 16)",    "cam_no": 16},
+# store_location → background image filename (without .jpg), section label
+LOCATION_MAP = {
+    "location01": {"image": "location01- FMCG Food",      "label": "FMCG Food"},
+    "location02": {"image": "location02- Grocery",         "label": "Grocery"},
+    "location03": {"image": "location03- Grocery 2",       "label": "Grocery 2"},
+    "location04": {"image": "location04- Home and Living", "label": "Home and Living"},
+    "location05": {"image": "location05- FMCG Food 2",     "label": "FMCG Food 2"},
+    "location06": {"image": "location06- GM- Stationery",  "label": "GM- Stationery"},
+    "location07": {"image": "location07- Dairy and Frozen","label": "Dairy and Frozen"},
+    "location08": {"image": "location08- Cash Counter",    "label": "Cash Counter"},
+    "location09": {"image": "location09- FMCG Non Food",   "label": "FMCG Non Food"},
 }
 
 @api_bp.route("/heatmap-data")
 @login_required_api
 def heatmap_data():
     from collections import OrderedDict
-    camera    = request.args.get("camera", "ChannelNo03")
+    location  = request.args.get("location", "location01")
     hour_from = int(request.args.get("hour_from", 0))
     hour_to   = int(request.args.get("hour_to",  23))
 
-    if camera not in CAMERA_MAP:
-        return jsonify({"error": "Unknown camera"}), 400
+    if location not in LOCATION_MAP:
+        return jsonify({"error": "Unknown location"}), 400
 
-    col    = get_spar_db().heatmap
-    cam_no = CAMERA_MAP[camera]["cam_no"]
+    col = get_spar_db().heatmap
 
     # Accept comma-separated dates or single date (backwards compat)
     dates_param = request.args.get("dates", "") or request.args.get("date", "")
     dates = [d.strip() for d in dates_param.split(",") if d.strip()]
 
     if not dates:
-        latest = col.find_one({"camera_no": cam_no}, sort=[("date_time", -1)])
-        dates = [latest["date_time"][:10]] if latest else ["2026-02-25"]
+        latest = col.find_one({"store_location": location}, sort=[("date_time", -1)])
+        dates = [latest["date_time"][:10]] if latest else []
+        if not dates:
+            return jsonify({"frames": [], "total": {"male": 0, "female": 0, "child": 0, "staff": 0}})
 
     # Build per-date hour-range conditions
     or_conditions = []
@@ -442,9 +448,9 @@ def heatmap_data():
         or_conditions.append({"date_time": {"$gte": tf, "$lt": tt}})
 
     if len(or_conditions) == 1:
-        filt = {"camera_no": cam_no, **or_conditions[0]}
+        filt = {"store_location": location, **or_conditions[0]}
     else:
-        filt = {"camera_no": cam_no, "$or": or_conditions}
+        filt = {"store_location": location, "$or": or_conditions}
 
     docs = list(col.find(
         filt,
@@ -490,29 +496,28 @@ def heatmap_data():
         if not multi:
             slot["datetime"] = doc["date_time"]
 
-    cam_info = CAMERA_MAP[camera]
+    loc_info = LOCATION_MAP[location]
     return jsonify({
-        "camera":    camera,
-        "image":     cam_info["image"],
-        "location":  cam_info["location"],
+        "location":  location,
+        "image":     loc_info["image"],
+        "label":     loc_info["label"],
         "dates":     dates,
         "hour_from": hour_from,
         "hour_to":   hour_to,
         "frames":    list(slots.values()),
         "total":     total,
-        "cameras":   [{"id": k, "label": v["label"]} for k, v in CAMERA_MAP.items()],
+        "locations": [{"id": k, "label": v["label"]} for k, v in LOCATION_MAP.items()],
     })
 
 @api_bp.route("/heatmap-dates")
 @login_required_api
 def heatmap_dates():
-    """Return distinct dates available per camera."""
-    camera = request.args.get("camera", "ChannelNo03")
-    if camera not in CAMERA_MAP:
+    """Return distinct dates available per store location."""
+    location = request.args.get("location", "location01")
+    if location not in LOCATION_MAP:
         return jsonify({"dates": []})
-    col    = get_spar_db().heatmap
-    cam_no = CAMERA_MAP[camera]["cam_no"]
-    docs = list(col.find({"camera_no": cam_no}, {"date_time": 1, "_id": 0}))
+    col  = get_spar_db().heatmap
+    docs = list(col.find({"store_location": location}, {"date_time": 1, "_id": 0}))
     dates = sorted({d["date_time"][:10] for d in docs})
     return jsonify({"dates": dates})
 
@@ -524,11 +529,13 @@ def heatmap_dates():
 def queue_stats():
     db = get_spar_db()
     date_from, date_to, date_to_ex = get_date_range()
+    hour_from, hour_to = get_hour_range()
     col = db.queue_length
 
     # date_time format: "YYYY-MM-DD_HH-MM-SS"
     # str_date_filter still works — lexicographic ordering is preserved
     filt = str_date_filter(date_from, date_to_ex)
+    filt.update(hour_expr_str(hour_from, hour_to))
 
     docs = list(col.find(filt, {
         "camera_no": 1, "date_time": 1,
@@ -608,14 +615,14 @@ def queue_stats():
         for h, vals in cs["hourly_queue"].items():
             g_hq.setdefault(h, []).extend(vals)
 
-    hourly_labels = [f"{h:02d}:00" for h in range(24)]
+    hourly_labels = [f"{h:02d}:00" for h in range(hour_from, hour_to + 1)]
     hourly_wait_vals  = [
         round(sum(g_hw[h]) / len(g_hw[h]), 2) if g_hw.get(h) else None
-        for h in range(24)
+        for h in range(hour_from, hour_to + 1)
     ]
     hourly_queue_vals = [
         round(sum(g_hq[h]) / len(g_hq[h]), 1) if g_hq.get(h) else None
-        for h in range(24)
+        for h in range(hour_from, hour_to + 1)
     ]
 
     # Per-counter hourly breakdown (for multi-line charts)
@@ -623,7 +630,7 @@ def queue_stats():
     for cam_no in sorted(cam_stats.keys()):
         cs = cam_stats[cam_no]
         hw, hq = [], []
-        for h in range(24):
+        for h in range(hour_from, hour_to + 1):
             wvals = cs["hourly_wait"].get(h, [])
             qvals = cs["hourly_queue"].get(h, [])
             hw.append(round(sum(wvals) / len(wvals), 2) if wvals else None)
@@ -705,7 +712,7 @@ def age_group():
     eff_h_to   = pin_hour if pin_hour is not None else hour_to
     filt.update(hour_expr_str(eff_h_from, eff_h_to))
 
-    VALID_GROUPS = {"18-25", "25-35", "35-45", "45+"}
+    VALID_GROUPS = {"Under 18", "18-25", "25-35", "35-45", "45+"}
     filt["age_group"] = {"$in": list(VALID_GROUPS)}
     if pin_gender:
         filt["gender"] = pin_gender
@@ -715,7 +722,7 @@ def age_group():
         {"$group": {"_id": "$age_group", "count": {"$sum": 1}}},
         {"$sort": {"count": -1}}
     ]))
-    LABEL_MAP = {"18-25": "18–25", "25-35": "25–35", "35-45": "35–45", "45+": "45+"}
+    LABEL_MAP = {"Under 18": "Under 18", "18-25": "18–25", "25-35": "25–35", "35-45": "35–45", "45+": "45+"}
     buckets = [
         {"key": r["_id"], "label": LABEL_MAP[r["_id"]], "count": r["count"]}
         for r in rows if r["_id"] in VALID_GROUPS

@@ -285,17 +285,19 @@
       <span class="hm-card-head-sub">Select options below, then click Load &amp; Render</span>
     </div>
 
-    <!-- Camera section -->
+    <!-- Section / Location section -->
     <div class="hm-section">
-      <div class="hm-sec-label"><i class="fa-solid fa-video"></i> Camera / Location</div>
+      <div class="hm-sec-label"><i class="fa-solid fa-map-location-dot"></i> Store Section</div>
       <div class="cam-chips" id="cameraChips">
-        <div class="cam-chip active" data-cam="ChannelNo02" onclick="selectCamera(this)">Cosmetics (Ch 02)</div>
-        <div class="cam-chip" data-cam="ChannelNo03" onclick="selectCamera(this)">Alcohol (Ch 03)</div>
-        <div class="cam-chip" data-cam="ChannelNo05" onclick="selectCamera(this)">Alcohol &amp; Perfumes (Ch 05)</div>
-        <div class="cam-chip" data-cam="ChannelNo06" onclick="selectCamera(this)">Alcohol (Ch 06)</div>
-        <div class="cam-chip" data-cam="ChannelNo07" onclick="selectCamera(this)">Alcohol (Ch 07)</div>
-        <div class="cam-chip" data-cam="ChannelNo15" onclick="selectCamera(this)">Bags (Ch 15)</div>
-        <div class="cam-chip" data-cam="ChannelNo16" onclick="selectCamera(this)">Confectionaries (Ch 16)</div>
+        <div class="cam-chip active" data-cam="location01" onclick="selectCamera(this)">FMCG Food</div>
+        <div class="cam-chip" data-cam="location02" onclick="selectCamera(this)">Grocery</div>
+        <div class="cam-chip" data-cam="location03" onclick="selectCamera(this)">Grocery 2</div>
+        <div class="cam-chip" data-cam="location04" onclick="selectCamera(this)">Home and Living</div>
+        <div class="cam-chip" data-cam="location05" onclick="selectCamera(this)">FMCG Food 2</div>
+        <div class="cam-chip" data-cam="location06" onclick="selectCamera(this)">GM- Stationery</div>
+        <div class="cam-chip" data-cam="location07" onclick="selectCamera(this)">Dairy and Frozen</div>
+        <div class="cam-chip" data-cam="location08" onclick="selectCamera(this)">Cash Counter</div>
+        <div class="cam-chip" data-cam="location09" onclick="selectCamera(this)">FMCG Non Food</div>
       </div>
     </div>
 
@@ -318,9 +320,9 @@
     <div class="hm-section">
       <div class="hm-sec-label"><i class="fa-regular fa-clock"></i> Hour Range</div>
       <div class="hour-row">
-        <input class="hour-input" type="number" id="hourFrom" value="0"  min="0" max="23" placeholder="00"/>
+        <input class="hour-input" type="number" id="hourFrom" value="9"  min="9" max="22" placeholder="09"/>
         <span class="hour-sep">—</span>
-        <input class="hour-input" type="number" id="hourTo"   value="23" min="0" max="23" placeholder="23"/>
+        <input class="hour-input" type="number" id="hourTo"   value="22" min="9" max="22" placeholder="22"/>
         <span class="hour-unit">hrs</span>
       </div>
     </div>
@@ -458,7 +460,7 @@ const HEAT_W   = 160, HEAT_H   = 90;
 const HEAT_SX  = HEAT_W / NATIVE_W, HEAT_SY = HEAT_H / NATIVE_H;
 
 // ── State ──
-let selectedCamera = 'ChannelNo02';
+let selectedCamera = 'location01';
 let allFrames      = [];
 let bgImage        = null;
 let currentMode    = 'heatmap';
@@ -469,7 +471,7 @@ let isPlaying      = false;
 
 // ── Init ──
 window.addEventListener('DOMContentLoaded', () => {
-  loadDates('ChannelNo02');
+  loadDates('location01');
 });
 window.addEventListener('resize', () => {
   if (bgImage && allFrames.length) requestAnimationFrame(() => renderCurrentView());
@@ -488,7 +490,7 @@ async function loadDates(camera) {
   const list = document.getElementById('dateList');
   list.innerHTML = '<div class="spinner" style="width:16px;height:16px;border-width:2px;margin:0;"></div>';
   try {
-    const res  = await fetch(`/api/heatmap-dates?camera=${camera}`);
+    const res  = await fetch(`/api/heatmap-dates?location=${camera}`);
     const data = await res.json();
     list.innerHTML = '';
     (data.dates || []).forEach(d => {
@@ -595,7 +597,7 @@ async function loadAndRender() {
 
   try {
     const res = await fetch(
-      `/api/heatmap-data?camera=${selectedCamera}&dates=${dates.join(',')}&hour_from=${hourFrom}&hour_to=${hourTo}`
+      `/api/heatmap-data?location=${selectedCamera}&dates=${dates.join(',')}&hour_from=${hourFrom}&hour_to=${hourTo}`
     );
     const data = await res.json();
 
@@ -609,7 +611,7 @@ async function loadAndRender() {
     updateStats(data.total, data.frames.length);
 
     setLoading(true, 'Loading background image…');
-    bgImage = await loadImage(`/static/img/heatmap/${data.image}.jpg`);
+    bgImage = await loadImage(`/static/img/heatmap/${encodeURIComponent(data.image)}.jpg`);
 
     setLoading(false);
     setupScrubber();

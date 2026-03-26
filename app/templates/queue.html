@@ -5,27 +5,61 @@
 {% block head %}
 <style>
   /* ── QUEUE PAGE EXTRAS ── */
-  .kpi-wait   { border-left-color: #3b7dd8; }
-  .kpi-queue  { border-left-color: #16a37a; }
-  .kpi-counters { border-left-color: #d97706; }
-  .kpi-obs    { border-left-color: #7c3aed; }
+  .kpi-wait {
+    border-left-color: #3b7dd8;
+  }
+
+  .kpi-queue {
+    border-left-color: #16a37a;
+  }
+
+  .kpi-counters {
+    border-left-color: #d97706;
+  }
+
+  .kpi-obs {
+    border-left-color: #7c3aed;
+  }
 
   .counter-badge {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 2px 9px; border-radius: 20px;
-    font-size: 11px; font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
     border: 1.5px solid;
   }
 
   /* wait bar */
-  .wait-bar-wrap { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; margin-top: 4px; }
-  .wait-bar-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+  .wait-bar-wrap {
+    height: 6px;
+    border-radius: 3px;
+    background: var(--border);
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .wait-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width .4s;
+  }
 
   /* table numeric cells right-aligned */
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
 
   /* loading state */
-  .load-msg { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
+  .load-msg {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+    font-size: 13px;
+  }
 </style>
 {% endblock %}
 
@@ -33,9 +67,9 @@
 <!-- FILTER BAR -->
 <div class="filter-bar">
   <label>From</label>
-  <input type="date" id="f-from"/>
+  <input type="date" id="f-from" />
   <label>To</label>
-  <input type="date" id="f-to"/>
+  <input type="date" id="f-to" />
   <button class="btn btn-primary" onclick="loadAll()">
     <i class="fa-solid fa-rotate"></i> Apply
   </button>
@@ -116,7 +150,9 @@
       Counter Summary
     </div>
     <div class="table-wrap" id="summary-wrap">
-      <div class="load-msg"><div class="spinner"></div></div>
+      <div class="load-msg">
+        <div class="spinner"></div>
+      </div>
     </div>
   </div>
 
@@ -125,248 +161,252 @@
 
 {% block scripts %}
 <script>
-// ── Palette for 5 counters ──
-const PALETTE = ['#3b7dd8','#16a37a','#d97706','#7c3aed','#DA291C'];
-const PALETTE_BG = ['rgba(59,125,216,.15)','rgba(22,163,122,.15)','rgba(217,119,6,.15)','rgba(124,58,237,.15)','rgba(218,41,28,.15)'];
+  // ── Palette for 5 counters ──
+  const PALETTE = ['#3b7dd8', '#16a37a', '#d97706', '#7c3aed', '#DA291C'];
+  const PALETTE_BG = ['rgba(59,125,216,.15)', 'rgba(22,163,122,.15)', 'rgba(217,119,6,.15)', 'rgba(124,58,237,.15)', 'rgba(218,41,28,.15)'];
 
-// ── Chart instances ──
-let waitBarChart, queueBarChart, hourlyWaitChart, hourlyQueueChart;
+  // ── Chart instances ──
+  let waitBarChart, queueBarChart, hourlyWaitChart, hourlyQueueChart;
 
-// ── Format helpers ──
-function fmtWait(min) {
-  if (min === null || min === undefined || min === 0) return '—';
-  if (min < 1) return Math.round(min * 60) + 's';
-  const m = Math.floor(min);
-  const s = Math.round((min - m) * 60);
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
-}
-
-function fmtQueue(q) {
-  if (q === null || q === undefined || q === 0) return '—';
-  return q.toFixed(1);
-}
-
-// ── Default dates: last 7 days ──
-function defaultDates() {
-  const now = new Date();
-  const to   = now.toISOString().slice(0,10);
-  const from = new Date(now - 7 * 86400000).toISOString().slice(0,10);
-  return { from, to };
-}
-
-function resetDates() {
-  const { from, to } = defaultDates();
-  document.getElementById('f-from').value = from;
-  document.getElementById('f-to').value   = to;
-  loadAll();
-}
-
-// ── Destroy & recreate chart helper ──
-function makeChart(id, config) {
-  const ctx = document.getElementById(id);
-  if (!ctx) return null;
-  const existing = Chart.getChart(ctx);
-  if (existing) existing.destroy();
-  return new Chart(ctx, config);
-}
-
-// ── Common chart defaults ──
-const BASE_OPTS = {
-  responsive: true,
-  animation: { duration: 350 },
-  plugins: {
-    legend: { display: false },
-    tooltip: { mode: 'index', intersect: false }
-  },
-  scales: {
-    x: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 11 } } },
-    y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 11 } }, beginAtZero: true }
+  // ── Format helpers ──
+  function fmtWait(min) {
+    if (min === null || min === undefined || min === 0) return '—';
+    if (min < 1) return Math.round(min * 60) + 's';
+    const m = Math.floor(min);
+    const s = Math.round((min - m) * 60);
+    return s > 0 ? `${m}m ${s}s` : `${m}m`;
   }
-};
 
-// ── Build charts from API data ──
-function buildCharts(d) {
-  const cameras    = d.cameras || [];
-  const labels     = cameras.map(c => c.label);
-  const waitVals   = cameras.map(c => c.avg_wait_min);
-  const queueVals  = cameras.map(c => c.avg_queue);
-  const colors     = cameras.map((_, i) => PALETTE[i % PALETTE.length]);
-  const colorsBg   = cameras.map((_, i) => PALETTE_BG[i % PALETTE_BG.length]);
+  function fmtQueue(q) {
+    if (q === null || q === undefined || q === 0) return '—';
+    return q.toFixed(1);
+  }
 
-  // ── Wait by counter (horizontal bar) ──
-  waitBarChart = makeChart('waitBarChart', {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Avg Wait (min)',
-        data: waitVals,
-        backgroundColor: colors,
-        borderColor: colors,
-        borderWidth: 1,
-        borderRadius: 4,
-      }]
-    },
-    options: {
-      ...BASE_OPTS,
-      indexAxis: 'y',
-      plugins: {
-        ...BASE_OPTS.plugins,
-        tooltip: {
-          callbacks: {
-            label: ctx => ' ' + fmtWait(ctx.raw)
-          }
-        }
-      },
-      scales: {
-        x: { ...BASE_OPTS.scales.x, beginAtZero: true,
-             title: { display: true, text: 'minutes', font: { size: 10 }, color: '#8492a6' } },
-        y: { ...BASE_OPTS.scales.y, grid: { display: false } }
-      }
-    }
-  });
+  // ── Default dates: last 7 days ──
+  function defaultDates() {
+    const now = new Date();
+    const to = now.toISOString().slice(0, 10);
+    const from = new Date(now - 7 * 86400000).toISOString().slice(0, 10);
+    return { from, to };
+  }
 
-  // ── Queue by counter (horizontal bar) ──
-  queueBarChart = makeChart('queueBarChart', {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Avg Queue Length',
-        data: queueVals,
-        backgroundColor: colors,
-        borderColor: colors,
-        borderWidth: 1,
-        borderRadius: 4,
-      }]
-    },
-    options: {
-      ...BASE_OPTS,
-      indexAxis: 'y',
-      plugins: {
-        ...BASE_OPTS.plugins,
-        tooltip: {
-          callbacks: {
-            label: ctx => ' ' + (ctx.raw ? ctx.raw.toFixed(1) + ' people' : '—')
-          }
-        }
-      },
-      scales: {
-        x: { ...BASE_OPTS.scales.x, beginAtZero: true,
-             title: { display: true, text: 'people', font: { size: 10 }, color: '#8492a6' } },
-        y: { ...BASE_OPTS.scales.y, grid: { display: false } }
-      }
-    }
-  });
+  function resetDates() {
+    const { from, to } = defaultDates();
+    document.getElementById('f-from').value = from;
+    document.getElementById('f-to').value = to;
+    loadAll();
+  }
 
-  // ── Hourly line charts ──
-  const hourlyLabels = d.hourly_labels || [];
-  const perCounter   = d.per_counter_hourly || [];
+  // ── Destroy & recreate chart helper ──
+  function makeChart(id, config) {
+    const ctx = document.getElementById(id);
+    if (!ctx) return null;
+    const existing = Chart.getChart(ctx);
+    if (existing) existing.destroy();
+    return new Chart(ctx, config);
+  }
 
-  // Overall average as a dashed dataset
-  const overallWaitDS = {
-    label: 'All Counters',
-    data: d.hourly_wait,
-    borderColor: '#8492a6',
-    backgroundColor: 'rgba(132,146,166,.08)',
-    borderWidth: 2,
-    borderDash: [5, 3],
-    pointRadius: 2,
-    tension: 0.3,
-    spanGaps: true,
-    fill: false,
-  };
-  const overallQueueDS = {
-    ...overallWaitDS,
-    label: 'All Counters',
-    data: d.hourly_queue,
-  };
-
-  const waitDatasets  = perCounter.map((c, i) => ({
-    label: c.label,
-    data:  c.wait,
-    borderColor:     PALETTE[i % PALETTE.length],
-    backgroundColor: PALETTE_BG[i % PALETTE_BG.length],
-    borderWidth: 2,
-    pointRadius: 2,
-    tension: 0.3,
-    spanGaps: true,
-    fill: false,
-  })).concat([overallWaitDS]);
-
-  const queueDatasets = perCounter.map((c, i) => ({
-    label: c.label,
-    data:  c.queue,
-    borderColor:     PALETTE[i % PALETTE.length],
-    backgroundColor: PALETTE_BG[i % PALETTE_BG.length],
-    borderWidth: 2,
-    pointRadius: 2,
-    tension: 0.3,
-    spanGaps: true,
-    fill: false,
-  })).concat([overallQueueDS]);
-
-  const lineOpts = {
-    ...BASE_OPTS,
+  // ── Common chart defaults ──
+  const BASE_OPTS = {
+    responsive: true,
+    animation: { duration: 350 },
     plugins: {
-      ...BASE_OPTS.plugins,
-      legend: {
-        display: true,
-        position: 'top',
-        labels: { boxWidth: 12, font: { size: 10 }, padding: 8 }
-      }
+      legend: { display: false },
+      tooltip: { mode: 'index', intersect: false }
     },
     scales: {
-      x: { ...BASE_OPTS.scales.x, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
-      y: { ...BASE_OPTS.scales.y, beginAtZero: true }
+      x: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 11 } } },
+      y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 11 } }, beginAtZero: true }
     }
   };
 
-  hourlyWaitChart = makeChart('hourlyWaitChart', {
-    type: 'line',
-    data: { labels: hourlyLabels, datasets: waitDatasets },
-    options: {
-      ...lineOpts,
+  // ── Build charts from API data ──
+  function buildCharts(d) {
+    const cameras = d.cameras || [];
+    const labels = cameras.map(c => c.label);
+    const waitVals = cameras.map(c => c.avg_wait_min);
+    const queueVals = cameras.map(c => c.avg_queue);
+    const colors = cameras.map((_, i) => PALETTE[i % PALETTE.length]);
+    const colorsBg = cameras.map((_, i) => PALETTE_BG[i % PALETTE_BG.length]);
+
+    // ── Wait by counter (horizontal bar) ──
+    waitBarChart = makeChart('waitBarChart', {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Avg Wait (min)',
+          data: waitVals,
+          backgroundColor: colors,
+          borderColor: colors,
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        ...BASE_OPTS,
+        indexAxis: 'y',
+        plugins: {
+          ...BASE_OPTS.plugins,
+          tooltip: {
+            callbacks: {
+              label: ctx => ' ' + fmtWait(ctx.raw)
+            }
+          }
+        },
+        scales: {
+          x: {
+            ...BASE_OPTS.scales.x, beginAtZero: true,
+            title: { display: true, text: 'minutes', font: { size: 10 }, color: '#8492a6' }
+          },
+          y: { ...BASE_OPTS.scales.y, grid: { display: false } }
+        }
+      }
+    });
+
+    // ── Queue by counter (horizontal bar) ──
+    queueBarChart = makeChart('queueBarChart', {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Avg Queue Length',
+          data: queueVals,
+          backgroundColor: colors,
+          borderColor: colors,
+          borderWidth: 1,
+          borderRadius: 4,
+        }]
+      },
+      options: {
+        ...BASE_OPTS,
+        indexAxis: 'y',
+        plugins: {
+          ...BASE_OPTS.plugins,
+          tooltip: {
+            callbacks: {
+              label: ctx => ' ' + (ctx.raw ? ctx.raw.toFixed(1) + ' people' : '—')
+            }
+          }
+        },
+        scales: {
+          x: {
+            ...BASE_OPTS.scales.x, beginAtZero: true,
+            title: { display: true, text: 'people', font: { size: 10 }, color: '#8492a6' }
+          },
+          y: { ...BASE_OPTS.scales.y, grid: { display: false } }
+        }
+      }
+    });
+
+    // ── Hourly line charts ──
+    const hourlyLabels = d.hourly_labels || [];
+    const perCounter = d.per_counter_hourly || [];
+
+    // Overall average as a dashed dataset
+    const overallWaitDS = {
+      label: 'All Counters',
+      data: d.hourly_wait,
+      borderColor: '#8492a6',
+      backgroundColor: 'rgba(132,146,166,.08)',
+      borderWidth: 2,
+      borderDash: [5, 3],
+      pointRadius: 2,
+      tension: 0.3,
+      spanGaps: true,
+      fill: false,
+    };
+    const overallQueueDS = {
+      ...overallWaitDS,
+      label: 'All Counters',
+      data: d.hourly_queue,
+    };
+
+    const waitDatasets = perCounter.map((c, i) => ({
+      label: c.label,
+      data: c.wait,
+      borderColor: PALETTE[i % PALETTE.length],
+      backgroundColor: PALETTE_BG[i % PALETTE_BG.length],
+      borderWidth: 2,
+      pointRadius: 2,
+      tension: 0.3,
+      spanGaps: true,
+      fill: false,
+    })).concat([overallWaitDS]);
+
+    const queueDatasets = perCounter.map((c, i) => ({
+      label: c.label,
+      data: c.queue,
+      borderColor: PALETTE[i % PALETTE.length],
+      backgroundColor: PALETTE_BG[i % PALETTE_BG.length],
+      borderWidth: 2,
+      pointRadius: 2,
+      tension: 0.3,
+      spanGaps: true,
+      fill: false,
+    })).concat([overallQueueDS]);
+
+    const lineOpts = {
+      ...BASE_OPTS,
       plugins: {
-        ...lineOpts.plugins,
-        tooltip: {
-          callbacks: {
-            label: ctx => ` ${ctx.dataset.label}: ${fmtWait(ctx.raw)}`
+        ...BASE_OPTS.plugins,
+        legend: {
+          display: true,
+          position: 'top',
+          labels: { boxWidth: 12, font: { size: 10 }, padding: 8 }
+        }
+      },
+      scales: {
+        x: { ...BASE_OPTS.scales.x, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+        y: { ...BASE_OPTS.scales.y, beginAtZero: true }
+      }
+    };
+
+    hourlyWaitChart = makeChart('hourlyWaitChart', {
+      type: 'line',
+      data: { labels: hourlyLabels, datasets: waitDatasets },
+      options: {
+        ...lineOpts,
+        plugins: {
+          ...lineOpts.plugins,
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.dataset.label}: ${fmtWait(ctx.raw)}`
+            }
           }
         }
       }
-    }
-  });
+    });
 
-  hourlyQueueChart = makeChart('hourlyQueueChart', {
-    type: 'line',
-    data: { labels: hourlyLabels, datasets: queueDatasets },
-    options: {
-      ...lineOpts,
-      plugins: {
-        ...lineOpts.plugins,
-        tooltip: {
-          callbacks: {
-            label: ctx => ` ${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(1) + ' people' : '—'}`
+    hourlyQueueChart = makeChart('hourlyQueueChart', {
+      type: 'line',
+      data: { labels: hourlyLabels, datasets: queueDatasets },
+      options: {
+        ...lineOpts,
+        plugins: {
+          ...lineOpts.plugins,
+          tooltip: {
+            callbacks: {
+              label: ctx => ` ${ctx.dataset.label}: ${ctx.raw !== null && ctx.raw !== undefined ? ctx.raw.toFixed(1) + ' people' : '—'}`
+            }
           }
         }
       }
-    }
-  });
-}
-
-// ── Build summary table ──
-function buildTable(cameras) {
-  if (!cameras || cameras.length === 0) {
-    document.getElementById('summary-wrap').innerHTML =
-      '<div class="load-msg">No data for selected period.</div>';
-    return;
+    });
   }
 
-  let rows = cameras.map((c, i) => {
-    const color = PALETTE[i % PALETTE.length];
-    const pct   = c.avg_wait_min ? Math.min(100, (c.avg_wait_min / 5) * 100) : 0; // scale to 5 min max
-    return `<tr>
+  // ── Build summary table ──
+  function buildTable(cameras) {
+    if (!cameras || cameras.length === 0) {
+      document.getElementById('summary-wrap').innerHTML =
+        '<div class="load-msg">No data for selected period.</div>';
+      return;
+    }
+
+    let rows = cameras.map((c, i) => {
+      const color = PALETTE[i % PALETTE.length];
+      const pct = c.avg_wait_min ? Math.min(100, (c.avg_wait_min / 5) * 100) : 0; // scale to 5 min max
+      return `<tr>
       <td>
         <span class="counter-badge" style="color:${color}; border-color:${color}; background:${color}18;">
           <i class="fa-solid fa-cash-register" style="font-size:10px;"></i>
@@ -387,9 +427,9 @@ function buildTable(cameras) {
       <td class="num" style="color:var(--red); font-weight:600;">${c.max_queue ? c.max_queue.toFixed(1) : '—'}</td>
       <td class="num" style="color:var(--muted);">${c.observations.toLocaleString()}</td>
     </tr>`;
-  }).join('');
+    }).join('');
 
-  document.getElementById('summary-wrap').innerHTML = `
+    document.getElementById('summary-wrap').innerHTML = `
     <table>
       <thead>
         <tr>
@@ -402,51 +442,51 @@ function buildTable(cameras) {
       </thead>
       <tbody>${rows}</tbody>
     </table>`;
-}
+  }
 
-// ── Update KPI cards ──
-function updateKPIs(d) {
-  document.getElementById('kpi-wait').textContent     = fmtWait(d.overall_avg_wait);
-  document.getElementById('kpi-queue').textContent    = d.overall_avg_queue ? d.overall_avg_queue.toFixed(1) : '—';
-  document.getElementById('kpi-counters').textContent = d.active_counters ?? '—';
-  document.getElementById('kpi-obs').textContent      = d.total_observations ? d.total_observations.toLocaleString() : '—';
-}
+  // ── Update KPI cards ──
+  function updateKPIs(d) {
+    document.getElementById('kpi-wait').textContent = fmtWait(d.overall_avg_wait);
+    document.getElementById('kpi-queue').textContent = d.overall_avg_queue ? d.overall_avg_queue.toFixed(1) : '—';
+    document.getElementById('kpi-counters').textContent = d.active_counters ?? '—';
+    document.getElementById('kpi-obs').textContent = d.total_observations ? d.total_observations.toLocaleString() : '—';
+  }
 
-// ── Main load function ──
-function loadAll() {
-  const from = document.getElementById('f-from').value;
-  const to   = document.getElementById('f-to').value;
-  const qs   = from && to ? `?from=${from}&to=${to}` : '';
+  // ── Main load function ──
+  function loadAll() {
+    const from = document.getElementById('f-from').value;
+    const to = document.getElementById('f-to').value;
+    const qs = from && to ? `?from=${from}&to=${to}` : '';
 
-  // Show loading in table
-  document.getElementById('summary-wrap').innerHTML =
-    '<div class="load-msg"><div class="spinner"></div></div>';
+    // Show loading in table
+    document.getElementById('summary-wrap').innerHTML =
+      '<div class="load-msg"><div class="spinner"></div></div>';
 
-  fetch(`/api/queue-stats${qs}`)
-    .then(r => r.json())
-    .then(d => {
-      if (d.error) {
+    fetch(`/api/queue-stats${qs}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) {
+          document.getElementById('summary-wrap').innerHTML =
+            `<div class="load-msg" style="color:var(--red);">${d.error}</div>`;
+          return;
+        }
+        updateKPIs(d);
+        buildCharts(d);
+        buildTable(d.cameras);
+      })
+      .catch(err => {
+        console.error('Queue stats error:', err);
         document.getElementById('summary-wrap').innerHTML =
-          `<div class="load-msg" style="color:var(--red);">${d.error}</div>`;
-        return;
-      }
-      updateKPIs(d);
-      buildCharts(d);
-      buildTable(d.cameras);
-    })
-    .catch(err => {
-      console.error('Queue stats error:', err);
-      document.getElementById('summary-wrap').innerHTML =
-        '<div class="load-msg" style="color:var(--red);">Failed to load data. Please try again.</div>';
-    });
-}
+          '<div class="load-msg" style="color:var(--red);">Failed to load data. Please try again.</div>';
+      });
+  }
 
-// ── Init ──
-(function init() {
-  const { from, to } = defaultDates();
-  document.getElementById('f-from').value = from;
-  document.getElementById('f-to').value   = to;
-  loadAll();
-})();
+  // ── Init ──
+  (function init() {
+    const { from, to } = defaultDates();
+    document.getElementById('f-from').value = from;
+    document.getElementById('f-to').value = to;
+    loadAll();
+  })();
 </script>
 {% endblock %}

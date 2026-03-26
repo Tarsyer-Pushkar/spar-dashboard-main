@@ -151,6 +151,7 @@ SPAR Dashboard{% endblock %}
   let ageData = [];
   let activeTrendMode = 'visitors';
   let trendChart, breakdownChart, hourlyChart, ageChart;
+  let isDefaultLoad = true;
 
   // ── Cross-chart filter state ─────────────────────────────────────────────────
   const F = { date: null, hour: null, gender: null, age: null };
@@ -202,6 +203,7 @@ SPAR Dashboard{% endblock %}
     return d.toISOString().slice(0, 10);
   }
   function setRange(daysBack) {
+    isDefaultLoad = false;
     document.getElementById('dateFrom').value = offsetDate(daysBack);
     document.getElementById('dateTo').value = todayStr();
     document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
@@ -209,6 +211,7 @@ SPAR Dashboard{% endblock %}
     loadAll();
   }
   function setYesterday() {
+    isDefaultLoad = false;
     const y = offsetDate(1);
     document.getElementById('dateFrom').value = y;
     document.getElementById('dateTo').value = y;
@@ -217,6 +220,7 @@ SPAR Dashboard{% endblock %}
     loadAll();
   }
   function applyFilters() {
+    isDefaultLoad = false;
     document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
     loadAll();
   }
@@ -342,15 +346,11 @@ SPAR Dashboard{% endblock %}
           y: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 10 }, color: '#8492a6' } }
         },
         onClick: (evt, elements) => {
-          if (!elements.length) return;
-          const idx = elements[0].index;
-          if (isHourly) {
-            toggleFilter('hour', parseInt(trendData.labels[idx]));
-          } else {
-            toggleFilter('date', trendData.labels[idx]); // full YYYY-MM-DD
-          }
+          // Graph points unclickable as requested
         },
-        onHover: pointerOnHover,
+        onHover: (evt, active) => {
+          evt.native.target.style.cursor = 'default';
+        },
       }
     });
   }
@@ -407,7 +407,11 @@ SPAR Dashboard{% endblock %}
   // ── Hourly Chart ──────────────────────────────────────────────────────────────
   async function loadHourly() {
     try {
-      const res = await fetch(`/api/hourly?${allParams()}`);
+      let params = allParams();
+      if (isDefaultLoad && !F.date) {
+        params += `&pin_date=${todayStr()}`;
+      }
+      const res = await fetch(`/api/hourly?${params}`);
       const d = await res.json();
       // Update title
       const titleEl = document.getElementById('hourlyTitle');
@@ -465,7 +469,27 @@ SPAR Dashboard{% endblock %}
   function renderAgeChart(buckets) {
     const ctx = document.getElementById('ageChart').getContext('2d');
     if (ageChart) ageChart.destroy();
-    const BASE = ['#DA291C', '#7c3aed', '#FFC72C', '#16a37a'];
+    
+    // Handle empty data
+    const parent = ctx.canvas.parentNode;
+    let noDataMsg = parent.querySelector('.no-data-msg');
+    if (!buckets || buckets.length === 0) {
+      if (!noDataMsg) {
+        noDataMsg = document.createElement('div');
+        noDataMsg.className = 'no-data-msg';
+        noDataMsg.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;';
+        noDataMsg.textContent = 'No data available for this range.';
+        parent.appendChild(noDataMsg);
+      }
+      noDataMsg.style.display = 'flex';
+      ctx.canvas.style.display = 'none';
+      return;
+    } else {
+      ctx.canvas.style.display = 'block';
+      if (noDataMsg) noDataMsg.style.display = 'none';
+    }
+
+    const BASE = ['#DA291C', '#7c3aed', '#FFC72C', '#16a37a', '#8492a6'];
     const colors = BASE.slice(0, buckets.length).map((c, i) =>
       F.age && F.age !== buckets[i].key ? c + '28' : c
     );
@@ -514,7 +538,7 @@ SPAR Dashboard{% endblock %}
   (function init() {
     const hf = document.getElementById('hourFrom');
     const ht = document.getElementById('hourTo');
-    for (let h = 0; h <= 23; h++) {
+    for (let h = 9; h <= 22; h++) {
       const label = String(h).padStart(2, '0') + ':00';
       hf.add(new Option(label, h));
       ht.add(new Option(label, h));
