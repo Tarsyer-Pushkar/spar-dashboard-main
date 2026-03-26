@@ -5,10 +5,14 @@
 
 {% block head %}
 <style>
-  /* ── Page wrapper — centred ── */
+  /* ── Page wrapper ── */
   .hm-page {
     flex: 1; display: flex; align-items: flex-start; justify-content: center;
     padding: 28px 24px; overflow-y: auto; min-height: 0;
+  }
+  .hm-page-inner {
+    width: 100%; max-width: 1200px;
+    display: flex; flex-direction: column; align-items: center; gap: 20px;
   }
 
   /* ── Selection card ── */
@@ -225,6 +229,109 @@
     z-index: 10;
   }
 
+  /* ── Data Table ── */
+  .hm-table-section {
+    width: 100%; background: var(--card); border-radius: 12px;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 12px rgba(0,0,0,.06); overflow: hidden;
+  }
+  .hm-table-head {
+    padding: 14px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .hm-table-title { font-size: 14px; font-weight: 700; color: var(--text); }
+  .hm-table-sub   { font-size: 11.5px; color: var(--muted); margin-left: 4px; }
+  .hm-table-close {
+    margin-left: auto; padding: 4px 10px; border: 1px solid var(--border);
+    border-radius: 6px; background: transparent; cursor: pointer;
+    font-size: 11px; color: var(--muted); font-family: inherit;
+    transition: all .15s;
+  }
+  .hm-table-close:hover { background: var(--bg); color: var(--text); }
+
+  .hm-table-legend {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 20px 10px; border-bottom: 1px solid var(--border);
+    font-size: 11px; color: var(--muted);
+  }
+  .hm-legend-grad {
+    width: 120px; height: 10px; border-radius: 4px;
+    background: linear-gradient(to right, #fff5f5, #DA291C);
+    border: 1px solid var(--border);
+  }
+
+  .hm-table-wrap { overflow-x: auto; padding: 0 0 4px; }
+  .hm-data-table {
+    width: 100%; border-collapse: collapse; font-size: 12.5px;
+    min-width: 700px;
+  }
+  .hm-data-table thead th {
+    background: var(--bg); padding: 8px 12px;
+    text-align: center; font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    border-bottom: 2px solid var(--border); font-weight: 600;
+    white-space: nowrap; position: sticky; top: 0; z-index: 1;
+  }
+  .hm-data-table thead th:first-child {
+    text-align: left; min-width: 150px; position: sticky; left: 0;
+    background: var(--bg); z-index: 2;
+  }
+  .hm-data-table tbody tr:hover td { filter: brightness(0.93); }
+  .hm-data-table tbody td {
+    padding: 7px 10px; text-align: center;
+    border-bottom: 1px solid var(--border);
+    border-right: 1px solid rgba(0,0,0,.04);
+    font-weight: 600; font-size: 12px;
+    transition: filter .1s;
+  }
+  .hm-data-table tbody td:first-child {
+    text-align: left; font-size: 12px; font-weight: 500;
+    color: var(--text-2); background: #fafafa;
+    border-right: 2px solid var(--border);
+    position: sticky; left: 0; z-index: 1;
+    white-space: nowrap; padding-left: 20px;
+  }
+  .hm-data-table tfoot td {
+    padding: 7px 10px; text-align: center;
+    background: #f0f1f5; font-size: 11.5px; font-weight: 700;
+    color: var(--text); border-top: 2px solid var(--border);
+    border-right: 1px solid rgba(0,0,0,.04);
+  }
+  .hm-data-table tfoot td:first-child {
+    text-align: left; padding-left: 20px; position: sticky; left: 0; z-index: 1;
+  }
+  .cell-zero { color: #ccc !important; font-weight: 400 !important; }
+
+  /* Download button */
+  .hm-dl-btn {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 13px; border-radius: 6px;
+    border: 1.5px solid var(--border);
+    background: #fff; color: var(--text-2);
+    font-size: 12px; font-weight: 600;
+    cursor: pointer; font-family: inherit;
+    transition: all .15s; white-space: nowrap;
+  }
+  .hm-dl-btn:hover { border-color: var(--primary); color: var(--primary); background: #fff5f5; }
+  .hm-dl-btn i { font-size: 11px; }
+
+  /* Render button row */
+  .hm-btn-row {
+    display: flex; gap: 10px;
+  }
+  .hm-render-btn { flex: 1; }
+  .hm-table-btn {
+    padding: 12px 18px;
+    background: #fff; color: var(--primary);
+    border: 2px solid var(--primary); border-radius: 8px;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    transition: all .15s;
+    display: flex; align-items: center; gap: 8px; white-space: nowrap;
+  }
+  .hm-table-btn:hover { background: var(--primary); color: #fff; }
+
   /* Scrubber bar */
   .hm-modal-scrubber {
     background: #1a1a1a; border-top: 1px solid #2a2a2a;
@@ -274,8 +381,11 @@
 {% endblock %}
 
 {% block content %}
-<!-- ── Centred selection card ── -->
+<!-- ── Page ── -->
 <div class="hm-page">
+<div class="hm-page-inner">
+
+  <!-- Selection card -->
   <div class="hm-card">
 
     <!-- Card header -->
@@ -283,6 +393,9 @@
       <i class="fa-solid fa-fire" style="color:var(--primary);font-size:15px;"></i>
       <span class="hm-card-head-title">Heatmap Viewer</span>
       <span class="hm-card-head-sub">Select options below, then click Load &amp; Render</span>
+      <button class="hm-dl-btn" onclick="downloadTableCSV()" title="Export table as CSV">
+        <i class="fa-solid fa-download"></i> Export CSV
+      </button>
     </div>
 
     <!-- Section / Location section -->
@@ -329,13 +442,43 @@
 
     <!-- Render button section -->
     <div class="hm-section">
-      <button class="hm-render-btn" onclick="loadAndRender()">
-        <i class="fa-solid fa-play" style="font-size:11px;"></i> Load &amp; Render
-      </button>
+      <div class="hm-btn-row">
+        <button class="hm-render-btn" onclick="loadAndRender()">
+          <i class="fa-solid fa-play" style="font-size:11px;"></i> Load &amp; Render
+        </button>
+        <button class="hm-table-btn" onclick="loadDataTable()">
+          <i class="fa-solid fa-table" style="font-size:11px;"></i> Data Table
+        </button>
+      </div>
     </div>
 
+  </div><!-- /.hm-card -->
+
+  <!-- ── Data Table section ── -->
+  <div class="hm-table-section" id="hmTableSection" style="display:none;">
+    <div class="hm-table-head">
+      <i class="fa-solid fa-table" style="color:var(--primary);font-size:13px;"></i>
+      <span class="hm-table-title">Section × Hour Traffic</span>
+      <span class="hm-table-sub" id="hmTableMeta"></span>
+      <button class="hm-table-close" onclick="closeDataTable()"><i class="fa-solid fa-xmark"></i> Close</button>
+    </div>
+    <div class="hm-table-legend">
+      <span>Low</span>
+      <div class="hm-legend-grad"></div>
+      <span>High</span>
+      <span style="margin-left:16px;color:var(--muted);">Cells show occupied minutes (0 – 60) · minutes where ≥1 person was detected</span>
+    </div>
+    <div class="hm-table-wrap">
+      <table class="hm-data-table" id="hmDataTable">
+        <thead id="hmTableHead"></thead>
+        <tbody id="hmTableBody"></tbody>
+        <tfoot id="hmTableFoot"></tfoot>
+      </table>
+    </div>
   </div>
-</div>
+
+</div><!-- /.hm-page-inner -->
+</div><!-- /.hm-page -->
 
 <!-- ── Heatmap Modal ── -->
 <div class="hm-modal-overlay" id="hmModal">
@@ -460,14 +603,15 @@ const HEAT_W   = 160, HEAT_H   = 90;
 const HEAT_SX  = HEAT_W / NATIVE_W, HEAT_SY = HEAT_H / NATIVE_H;
 
 // ── State ──
-let selectedCamera = 'location01';
-let allFrames      = [];
-let bgImage        = null;
-let currentMode    = 'heatmap';
-let activeTypes    = new Set(['male','female','child','staff']);
-let currentSlot    = 0;
-let playTimer      = null;
-let isPlaying      = false;
+let selectedCamera  = 'location01';
+let allFrames       = [];
+let bgImage         = null;
+let currentMode     = 'heatmap';
+let activeTypes     = new Set(['male','female','child','staff']);
+let currentSlot     = 0;
+let playTimer       = null;
+let isPlaying       = false;
+let lastTableData   = null;   // cached for CSV export
 
 // ── Init ──
 window.addEventListener('DOMContentLoaded', () => {
@@ -860,6 +1004,202 @@ function setLoading(show, msg) {
   const el = document.getElementById('hmLoading');
   el.style.display = show ? 'flex' : 'none';
   if (msg) document.getElementById('loadingMsg').textContent = msg;
+}
+
+// ── Data Table ──
+async function loadDataTable() {
+  const dates    = getSelectedDates();
+  const hourFrom = document.getElementById('hourFrom').value;
+  const hourTo   = document.getElementById('hourTo').value;
+
+  if (dates.length === 0) { alert('Please select at least one date.'); return; }
+
+  const btn = document.querySelector('.hm-table-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:11px;"></i> Loading…';
+
+  try {
+    const res  = await fetch(`/api/heatmap-table?dates=${dates.join(',')}&hour_from=${hourFrom}&hour_to=${hourTo}`);
+    const data = await res.json();
+
+    if (data.error) { alert(data.error); return; }
+
+    lastTableData = { data, dates, hourFrom, hourTo };
+    renderDataTable(data, dates, hourFrom, hourTo);
+    document.getElementById('hmTableSection').style.display = '';
+    document.getElementById('hmTableSection').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch(e) {
+    alert('Failed to load table data.');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa-solid fa-table" style="font-size:11px;"></i> Data Table';
+  }
+}
+
+function closeDataTable() {
+  document.getElementById('hmTableSection').style.display = 'none';
+}
+
+function renderDataTable(data, dates, hourFrom, hourTo) {
+  const { hours, hour_labels, sections, table, n_dates } = data;
+
+  // Meta label
+  const dateLabel = dates.length === 1 ? formatDate(dates[0]) : `${dates.length} dates`;
+  const avgNote   = dates.length > 1 ? '  ·  avg across dates' : '';
+  document.getElementById('hmTableMeta').textContent =
+    `${dateLabel}  ·  ${hourFrom}:00 – ${hourTo}:00${avgNote}`;
+
+  // Values are minutes (0–60). Max for colour scale is 60.
+  const COLOR_MAX = 60;
+
+  // Row averages (avg occupied-mins across hours) and column averages (avg across sections)
+  const rowAvg = {};
+  sections.forEach(sec => {
+    const vals = hours.map(h => table[h]?.[sec.id]?.minutes || 0).filter(v => v > 0);
+    rowAvg[sec.id] = vals.length ? Math.round(vals.reduce((a,b) => a+b,0) / vals.length) : 0;
+  });
+  const colAvg = {};
+  hours.forEach(h => {
+    const vals = sections.map(sec => table[h]?.[sec.id]?.minutes || 0).filter(v => v > 0);
+    colAvg[h] = vals.length ? Math.round(vals.reduce((a,b) => a+b,0) / vals.length) : 0;
+  });
+
+  // ── THEAD ──
+  const thead = document.getElementById('hmTableHead');
+  thead.innerHTML = '';
+  const hr = document.createElement('tr');
+  const th0 = document.createElement('th');
+  th0.textContent = 'Section';
+  hr.appendChild(th0);
+  hours.forEach((h, i) => {
+    const th = document.createElement('th');
+    th.textContent = hour_labels[i];
+    hr.appendChild(th);
+  });
+  const thAvg = document.createElement('th');
+  thAvg.textContent = 'Avg / hr';
+  thAvg.style.cssText = 'color:var(--text);background:#e8eaf0;';
+  hr.appendChild(thAvg);
+  thead.appendChild(hr);
+
+  // ── TBODY ──
+  const tbody = document.getElementById('hmTableBody');
+  tbody.innerHTML = '';
+  sections.forEach(sec => {
+    const tr = document.createElement('tr');
+
+    const tdLabel = document.createElement('td');
+    tdLabel.textContent = sec.label;
+    tr.appendChild(tdLabel);
+
+    hours.forEach(h => {
+      const mins = table[h]?.[sec.id]?.minutes || 0;
+      const td   = document.createElement('td');
+      if (mins === 0) {
+        td.textContent = '—';
+        td.classList.add('cell-zero');
+      } else {
+        td.textContent = `${mins} min`;
+        const ratio = mins / COLOR_MAX;
+        td.style.background = heatCellColor(ratio);
+        td.style.color = ratio > 0.55 ? '#fff' : '#1e2235';
+      }
+      const cell = table[h]?.[sec.id] || {};
+      td.title = `${sec.label}  ${h}:00\n${mins} min occupied\nMale: ${cell.male || 0}  Female: ${cell.female || 0}  Child: ${cell.child || 0}  Staff: ${cell.staff || 0}`;
+      tr.appendChild(td);
+    });
+
+    // Row avg
+    const tdRowAvg = document.createElement('td');
+    const ra = rowAvg[sec.id];
+    tdRowAvg.textContent = ra > 0 ? `${ra} min` : '—';
+    tdRowAvg.style.cssText = 'background:#f0f1f5;font-weight:700;color:var(--text);';
+    tr.appendChild(tdRowAvg);
+
+    tbody.appendChild(tr);
+  });
+
+  // ── TFOOT ──
+  const tfoot = document.getElementById('hmTableFoot');
+  tfoot.innerHTML = '';
+  const fr = document.createElement('tr');
+  const ftd0 = document.createElement('td');
+  ftd0.textContent = 'Avg / section';
+  fr.appendChild(ftd0);
+  hours.forEach(h => {
+    const ftd = document.createElement('td');
+    const cv  = colAvg[h];
+    ftd.textContent = cv > 0 ? `${cv} min` : '—';
+    fr.appendChild(ftd);
+  });
+  const ftdCorner = document.createElement('td');
+  ftdCorner.textContent = '';
+  ftdCorner.style.cssText = 'background:#dde0e8;';
+  fr.appendChild(ftdCorner);
+  tfoot.appendChild(fr);
+}
+
+// ── CSV Export ──
+function downloadTableCSV() {
+  if (!lastTableData) {
+    alert('Load the Data Table first before exporting.');
+    return;
+  }
+  const { data, dates, hourFrom, hourTo } = lastTableData;
+  const { hours, hour_labels, sections, table, n_dates } = data;
+
+  const rows = [];
+  const dateLabel = dates.length === 1 ? dates[0] : `${dates.join('+')}`;
+  const avgNote   = dates.length > 1 ? ' (avg across dates)' : '';
+
+  // Header rows
+  rows.push([`SPAR Heatmap — Occupied Minutes${avgNote}`, `Date(s): ${dateLabel}`, `Hours: ${hourFrom}:00–${hourTo}:00`]);
+  rows.push([]);
+
+  // Column header
+  const headerRow = ['Section', ...hour_labels, 'Avg / hr'];
+  rows.push(headerRow);
+
+  // Data rows
+  sections.forEach(sec => {
+    const vals = hours.map(h => table[h]?.[sec.id]?.minutes || 0);
+    const nonZero = vals.filter(v => v > 0);
+    const avg = nonZero.length ? Math.round(nonZero.reduce((a,b) => a+b,0) / nonZero.length) : 0;
+    rows.push([sec.label, ...vals, avg]);
+  });
+
+  // Footer row
+  const footRow = ['Avg / section'];
+  hours.forEach(h => {
+    const vals = sections.map(sec => table[h]?.[sec.id]?.minutes || 0).filter(v => v > 0);
+    footRow.push(vals.length ? Math.round(vals.reduce((a,b) => a+b,0) / vals.length) : 0);
+  });
+  footRow.push('');
+  rows.push(footRow);
+
+  // Build CSV string
+  const csv = rows.map(r => r.map(cell => {
+    const s = String(cell);
+    return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(',')).join('\r\n');
+
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `spar_heatmap_${dateLabel}_${hourFrom}-${hourTo}h.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function heatCellColor(ratio) {
+  // White → light red → red  (matches SPAR primary)
+  if (ratio === 0) return '#fff';
+  // Interpolate: #fff5f5 (0) → #DA291C (1)
+  const r = Math.round(255 - (255 - 218) * ratio);       // 255 → 218
+  const g = Math.round(245 - (245 -  41) * ratio);        // 245 → 41
+  const b = Math.round(245 - (245 -  28) * ratio);        // 245 → 28
+  return `rgb(${r},${g},${b})`;
 }
 </script>
 {% endblock %}

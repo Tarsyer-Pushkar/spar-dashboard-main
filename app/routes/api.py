@@ -509,6 +509,106 @@ def heatmap_data():
         "locations": [{"id": k, "label": v["label"]} for k, v in LOCATION_MAP.items()],
     })
 
+@api_bp.route("/heatmap-table")
+@login_required_api
+def heatmap_table():
+    """Return per-section, per-hour occupied minutes for the tabular heatmap view.
+
+    Each cell = number of distinct minute-slots (HH:MM) in that hour where at least
+    one person was detected, averaged across the selected dates.  Max value = 60.
+    """
+    from collections import defaultdict
+    import ast
+
+    dates_param = request.args.get("dates", "")
+    dates = [d.strip() for d in dates_param.split(",") if d.strip()]
+    hour_from = int(request.args.get("hour_from", 9))
+    hour_to   = int(request.args.get("hour_to",  22))
+
+    if not dates:
+        return jsonify({"error": "No dates provided"}), 400
+
+    col = get_spar_db().heatmap
+
+    or_conditions = []
+    for d in dates:
+        tf   = f"{d} {hour_from:02d}:00:00"
+        tt_h = hour_to + 1
+        if tt_h >= 24:
+            next_d = (datetime.strptime(d, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+            tt = f"{next_d} 00:00:00"
+        else:
+            tt = f"{d} {tt_h:02d}:00:00"
+        or_conditions.append({"date_time": {"$gte": tf, "$lt": tt}})
+
+    filt = or_conditions[0] if len(or_conditions) == 1 else {"$or": or_conditions}
+
+    docs = list(col.find(filt, {"date_time": 1, "store_location": 1, "count": 1, "_id": 0}))
+
+    hours     = [f"{h:02d}" for h in range(hour_from, hour_to + 1)]
+    hours_set = set(hours)
+
+    # presence[loc][hour_str][date_str] = set of "HH:MM" minute-strings with detections
+    presence = defaultdict(lambda: defaultdict(lambda: defaultdict(set)))
+    # counts[loc][hour_str] = cumulative detection counts across all docs
+    counts = defaultdict(lambda: defaultdict(lambda: {"male": 0, "female": 0, "child": 0, "staff": 0}))
+
+    for doc in docs:
+        dt_str = doc.get("date_time", "")
+        if len(dt_str) < 16:
+            continue
+        date_str   = dt_str[:10]       # YYYY-MM-DD
+        hour_str   = dt_str[11:13]     # HH
+        minute_str = dt_str[11:16]     # HH:MM
+
+        if hour_str not in hours_set:
+            continue
+        loc = doc.get("store_location", "")
+        if loc not in LOCATION_MAP:
+            continue
+
+        cnt = doc.get("count") or {}
+        if isinstance(cnt, str):
+            try: cnt = ast.literal_eval(cnt)
+            except: cnt = {}
+
+        cats = {cat: int(cnt.get(cat, 0) or 0) for cat in ("male", "female", "child", "staff")}
+        total = sum(cats.values())
+        if total > 0:
+            presence[loc][hour_str][date_str].add(minute_str)
+        for cat, v in cats.items():
+            counts[loc][hour_str][cat] += v
+
+    # Build table: average occupied-minutes across selected dates, cap at 60
+    n_dates = len(dates)
+    table = {}
+    for h in hours:
+        table[h] = {}
+        for loc in LOCATION_MAP:
+            hour_data = presence[loc].get(h, {})
+            total_mins = sum(len(mins) for mins in hour_data.values())
+            avg_mins   = round(total_mins / n_dates) if n_dates else 0
+            c = counts[loc].get(h, {"male": 0, "female": 0, "child": 0, "staff": 0})
+            table[h][loc] = {
+                "minutes": min(60, avg_mins),
+                "male":    c["male"],
+                "female":  c["female"],
+                "child":   c["child"],
+                "staff":   c["staff"],
+            }
+
+    sections    = [{"id": k, "label": v["label"]} for k, v in LOCATION_MAP.items()]
+    hour_labels = [f"{h}:00" for h in hours]
+
+    return jsonify({
+        "hours":       hours,
+        "hour_labels": hour_labels,
+        "sections":    sections,
+        "table":       table,
+        "n_dates":     n_dates,
+    })
+
+
 @api_bp.route("/heatmap-dates")
 @login_required_api
 def heatmap_dates():
