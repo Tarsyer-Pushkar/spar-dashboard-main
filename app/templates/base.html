@@ -256,23 +256,103 @@
 
 <!-- HORIZONTAL NAV -->
 <nav class="topnav">
-  <a href="/overview" class="nav-item {% if request.path == '/overview' %}active{% endif %}">
+  <div style="display: flex; align-items: center; gap: 12px; padding: 0 8px;">
+    <label style="font-size: 11px; color: rgba(255,255,255,0.7); font-weight: 500; white-space: nowrap;">Store:</label>
+    <select id="globalStoreCode" style="padding: 6px 10px; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px; font-size: 11.5px; font-family: inherit; background: #fff; color: #1e2235; outline: none; cursor: pointer; min-width: 260px;">
+      <option value="">-- Select a Store --</option>
+      <option value="Spar-20016-TSM-Mall-Udupi">Spar-20016-TSM-Mall-Udupi</option>
+      <option value="Spar-30008-Langval-mall-Thanjavur">Spar-30008-Langval-mall-Thanjavur</option>
+          <option value="Spar-30003-FVM-Chennai">Spar-30003-FVM-Chennai</option>
+          <option value="10008_Sarath_Hyderabad">Spar-10008-Sarath-Hyderabad</option>
+          <option value="Spar-20005-City-Center-Mall-Mangalore">Spar-20005-City-Center-Mall-Mangalore</option>
+          <option value="Spar-20015-PSN-Mall-Bangalore">Spar-20015-PSN-Mall-Bangalore</option>
+    </select>
+  </div>
+  <div class="nav-sep"></div>
+
+  <a href="/overview" class="nav-item {% if request.path == '/overview' %}active{% endif %}" id="navOverview">
     <i class="fa-solid fa-gauge-high"></i> Overview
   </a>
 
   <div class="nav-sep"></div>
-  <a href="/heatmap" class="nav-item {% if request.path == '/heatmap' %}active{% endif %}">
+  <a href="/heatmap" class="nav-item {% if request.path == '/heatmap' %}active{% endif %}" id="navHeatmap">
     <i class="fa-solid fa-fire"></i> Heatmap
   </a>
   <div class="nav-sep"></div>
-  <a href="/queue" class="nav-item {% if request.path == '/queue' %}active{% endif %}">
+  <a href="/queue" class="nav-item {% if request.path == '/queue' %}active{% endif %}" id="navQueue">
     <i class="fa-solid fa-clock"></i> Queue &amp; Wait
   </a>
   <div class="nav-sep"></div>
-  <a href="/devices" class="nav-item {% if request.path == '/devices' %}active{% endif %}">
+  <a href="/devices" class="nav-item {% if request.path == '/devices' %}active{% endif %}" id="navDevices">
     <i class="fa-solid fa-heart-pulse"></i> Device Health
   </a>
 </nav>
+
+<script>
+  // ── Global Store Code Management ──
+  const STORE_CODES = ['Spar-20016-TSM-Mall-Udupi', 'Spar-30008-Langval-mall-Thanjavur', 'Spar-30003-FVM-Chennai', '10008_Sarath_Hyderabad', 'Spar-20005-City-Center-Mall-Mangalore', 'Spar-20015-PSN-Mall-Bangalore'];
+  const STORE_CODE_KEY = 'tarsyer_store_code';
+
+  // Initialize global store code
+  function initGlobalStoreCode() {
+    const storeCodeDropdown = document.getElementById('globalStoreCode');
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlStoreCode = urlParams.get('store_code');
+    const savedStoreCode = localStorage.getItem(STORE_CODE_KEY);
+
+    let currentStore = urlStoreCode || savedStoreCode || '';
+
+    // Validate store code (only set if valid)
+    if (currentStore && !STORE_CODES.includes(currentStore)) {
+      currentStore = '';
+    }
+
+    storeCodeDropdown.value = currentStore;
+    if (currentStore) {
+      localStorage.setItem(STORE_CODE_KEY, currentStore);
+    }
+    window.currentStoreCode = currentStore;
+  }
+
+  // Handle store code change
+  document.getElementById('globalStoreCode').addEventListener('change', function(e) {
+    const newStoreCode = e.target.value;
+    localStorage.setItem(STORE_CODE_KEY, newStoreCode);
+    window.currentStoreCode = newStoreCode;
+
+    // Update all navigation links with new store code
+    updateNavLinks(newStoreCode);
+
+    // Reload current page with new store code
+    const currentPath = window.location.pathname;
+    window.location.href = currentPath + '?store_code=' + encodeURIComponent(newStoreCode);
+  });
+
+  // Update navigation links with store code
+  function updateNavLinks(storeCode) {
+    const links = ['navOverview', 'navHeatmap', 'navQueue', 'navDevices'];
+    links.forEach(id => {
+      const link = document.getElementById(id);
+      if (link) {
+        const path = link.getAttribute('href');
+        link.setAttribute('href', path + '?store_code=' + encodeURIComponent(storeCode));
+      }
+    });
+  }
+
+  // Initialize on page load
+  document.addEventListener('DOMContentLoaded', function() {
+    initGlobalStoreCode();
+    updateNavLinks(window.currentStoreCode);
+  });
+
+  // If DOM already loaded, initialize immediately
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initGlobalStoreCode);
+  } else {
+    initGlobalStoreCode();
+  }
+</script>
 
 <div class="main">
   {% block content %}{% endblock %}

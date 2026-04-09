@@ -29,8 +29,18 @@
 {% block scripts %}
 <script>
 async function loadDevices() {
+  // Check if a store is selected
+  if (!window.currentStoreCode) {
+    document.getElementById('deviceChips').innerHTML =
+      '<div style="display:flex;align-items:center;justify-content:center;height:60px;color:var(--muted);"><i class="fa-solid fa-store" style="font-size:20px;margin-right:8px;opacity:0.3;"></i>Please select a store</div>';
+    document.getElementById('deviceGrid').innerHTML =
+      `<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:32px;"><i class="fa-solid fa-store" style="font-size:48px;opacity:0.3;margin-bottom:16px;"></i><div style="font-size:14px;font-weight:500;">Please select a store to view device data</div></div>`;
+    return;
+  }
+
   try {
-    const res = await fetch('/api/devices');
+    const storeCode = window.currentStoreCode;
+    const res = await fetch(`/api/devices?store_code=${storeCode}`);
     const d   = await res.json();
     renderChips(d.devices);
     renderCards(d.devices);
@@ -69,9 +79,10 @@ function renderCards(devices) {
   };
 
   const colLabels = {
-    footfall: { icon: 'fa-users', label: 'Footfall Camera' },
-    alerts:   { icon: 'fa-bell',  label: 'Alert Camera' },
-    heatmap:  { icon: 'fa-fire',  label: 'Heatmap Camera' },
+    footfall:     { icon: 'fa-users',         label: 'Footfall Camera' },
+    alerts:       { icon: 'fa-bell',          label: 'Alert Camera' },
+    heatmap:      { icon: 'fa-fire',          label: 'Heatmap Camera' },
+    queue_length: { icon: 'fa-people-line',   label: 'Queue Length Camera' },
   };
 
   let html = '';
@@ -135,7 +146,17 @@ function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-loadDevices();
-setInterval(loadDevices, 60000); // refresh every minute
+// Wait for store code to be initialized and check if one is selected
+const checkStoreInterval = setInterval(() => {
+  if (window.currentStoreCode !== undefined) {
+    clearInterval(checkStoreInterval);
+    loadDevices();
+    setInterval(loadDevices, 60000); // refresh every minute
+  }
+}, 50);
+
+// Also monitor store code changes
+const storeDropdown = document.getElementById('globalStoreCode');
+storeDropdown.addEventListener('change', loadDevices);
 </script>
 {% endblock %}

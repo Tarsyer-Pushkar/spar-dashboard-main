@@ -146,6 +146,48 @@ SPAR Dashboard{% endblock %}
 
 {% block scripts %}
 <script>
+  // ── Center-text plugin for doughnut charts ───────────────────────────────────
+  Chart.register({
+    id: 'centerText',
+    afterDraw(chart) {
+      const cfg = chart.config.options.plugins.centerText;
+      if (!cfg) return;
+      const { ctx, chartArea: { top, left, width, height } } = chart;
+      const cx = left + width / 2, cy = top + height / 2;
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `700 ${cfg.fontSize || 20}px Inter,sans-serif`;
+      ctx.fillStyle = cfg.color || '#1e2235';
+      ctx.fillText(cfg.text || '', cx, cy - (cfg.subText ? 9 : 0));
+      if (cfg.subText) {
+        ctx.font = `500 10px Inter,sans-serif`;
+        ctx.fillStyle = '#8492a6';
+        ctx.fillText(cfg.subText, cx, cy + 11);
+      }
+      ctx.restore();
+    }
+  });
+
+  // ── Dynamic Y range (avoid flat lines when values cluster near each other) ───
+  function dynamicYRange(values, padFraction = 0.25) {
+    const valid = (values || []).filter(v => v !== null && v !== undefined && !isNaN(v) && v > 0);
+    if (!valid.length) return {};
+    const lo = Math.min(...valid), hi = Math.max(...valid);
+    const span = hi - lo, mean = valid.reduce((a, b) => a + b, 0) / valid.length;
+    const eff  = span < mean * 0.05 ? mean * 0.3 : span;
+    const pad  = eff * padFraction;
+    return { min: Math.max(0, lo - pad), max: hi + pad };
+  }
+
+  // ── Gradient helper (vertical, for line chart fills) ─────────────────────────
+  function lineGradient(ctx, color, height) {
+    const g = ctx.createLinearGradient(0, 0, 0, height);
+    g.addColorStop(0,   color + '55');
+    g.addColorStop(0.6, color + '18');
+    g.addColorStop(1,   color + '00');
+    return g;
+  }
+
   // ── Chart state ──────────────────────────────────────────────────────────────
   let trendData = { labels: [], visitors: [], staff: [], mode: 'daily' };
   let ageData = [];
@@ -227,14 +269,16 @@ SPAR Dashboard{% endblock %}
   function downloadExcel(type) {
     const from = document.getElementById('dateFrom').value;
     const to = document.getElementById('dateTo').value;
-    window.location.href = `/api/export-footfall?from=${from}&to=${to}`;
+    const storeCode = window.currentStoreCode || 'Spar-20016-TSM-Mall-Udupi';
+    window.location.href = `/api/export-footfall?from=${from}&to=${to}&store_code=${storeCode}`;
   }
   function getDateParams() {
     const from = document.getElementById('dateFrom').value;
     const to = document.getElementById('dateTo').value;
     const hourFrom = document.getElementById('hourFrom').value;
     const hourTo = document.getElementById('hourTo').value;
-    return `from=${from}&to=${to}&hour_from=${hourFrom}&hour_to=${hourTo}`;
+    const storeCode = window.currentStoreCode || 'Spar-20016-TSM-Mall-Udupi';
+    return `from=${from}&to=${to}&hour_from=${hourFrom}&hour_to=${hourTo}&store_code=${storeCode}`;
   }
   function allParams() { return getDateParams() + pinParams(); }
 
@@ -307,16 +351,29 @@ SPAR Dashboard{% endblock %}
     renderTrendChart(mode);
   }
   function renderTrendChart(mode) {
-    const ctx = document.getElementById('trendChart').getContext('2d');
+    const canvas = document.getElementById('trendChart');
+    const ctx = canvas.getContext('2d');
     if (trendChart) trendChart.destroy();
-    const data = mode === 'visitors' ? trendData.visitors : trendData.staff;
-    const color = mode === 'visitors' ? '#DA291C' : '#16a37a';
+    const data     = mode === 'visitors' ? trendData.visitors : trendData.staff;
+    const color    = mode === 'visitors' ? '#DA291C' : '#16a37a';
     const isHourly = trendData.mode === 'hourly';
 
-    // Display labels: daily → "MM-DD", hourly → "HH:00"
     const dispLabels = isHourly
       ? trendData.labels.map(l => l + ':00')
       : trendData.labels.map(l => l.slice(5));
+
+    // Peak highlighting for hourly bar chart
+    const peak = isHourly ? Math.max(...(data.filter(v => v > 0))) : 0;
+    const barColors = isHourly
+      ? data.map((v, i) => F.hour !== null
+          ? (i === F.hour ? color : color + '40')
+          : (v === peak ? color : color + '88'))
+      : null;
+
+    // Gradient fill for line chart
+    const grad = isHourly ? null : lineGradient(ctx, color, canvas.offsetHeight || 220);
+
+    const yRange = isHourly ? {} : dynamicYRange(data);
 
     trendChart = new Chart(ctx, {
       type: isHourly ? 'bar' : 'line',
@@ -324,33 +381,40 @@ SPAR Dashboard{% endblock %}
         labels: dispLabels,
         datasets: [{
           label: mode === 'visitors' ? 'Visitors' : 'Staff',
-          data: data,
+          data,
           borderColor: color,
-          backgroundColor: isHourly
-            ? trendData.labels.map((l, i) => F.hour !== null && i === F.hour ? color : color + '80')
-            : color + '18',
+          backgroundColor: isHourly ? barColors : grad,
           fill: !isHourly,
-          tension: 0.35,
-          pointRadius: isHourly ? 0 : (trendData.labels.length > 20 ? 2 : 4),
-          pointHitRadius: isHourly ? 0 : 12,
-          pointHoverRadius: 6,
-          borderWidth: isHourly ? 0 : 2,
-          borderRadius: isHourly ? 4 : 0,
+          tension: 0.42,
+          pointRadius: isHourly ? 0 : (data.length > 20 ? 2 : 4),
+          pointBackgroundColor: color,
+          pointBorderColor: '#fff',
+          pointBorderWidth: 1.5,
+          pointHitRadius: isHourly ? 0 : 14,
+          pointHoverRadius: 7,
+          pointHoverBackgroundColor: color,
+          borderWidth: isHourly ? 0 : 2.5,
+          borderRadius: isHourly ? 6 : 0,
+          borderSkipped: false,
         }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        animation: { duration: 700, easing: 'easeOutQuart' },
         plugins: { legend: { display: false } },
         scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: isHourly ? 12 : 10, color: '#8492a6' } },
-          y: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 10 }, color: '#8492a6' } }
+          x: {
+            grid: { display: false },
+            ticks: { font: { size: 10 }, maxTicksLimit: isHourly ? 12 : 10, color: '#8492a6' }
+          },
+          y: {
+            grid: { color: '#f0f0f0' },
+            ticks: { font: { size: 10 }, color: '#8492a6' },
+            ...yRange,
+          }
         },
-        onClick: (evt, elements) => {
-          // Graph points unclickable as requested
-        },
-        onHover: (evt, active) => {
-          evt.native.target.style.cursor = 'default';
-        },
+        onClick: () => {},
+        onHover: (evt) => { evt.native.target.style.cursor = 'default'; },
       }
     });
   }
@@ -374,27 +438,30 @@ SPAR Dashboard{% endblock %}
     document.getElementById('breakdownNote').textContent =
       F.age ? `(from age group ${F.age})` : '';
 
+    const total = male + female + child;
     breakdownChart = new Chart(ctx, {
       type: 'doughnut',
       data: {
         labels: ['Male', 'Female', 'Child'],
-        datasets: [{ data: [male, female, child], backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }]
+        datasets: [{ data: [male, female, child], backgroundColor: colors, borderWidth: 2.5, borderColor: '#fff', hoverOffset: 6 }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        animation: { duration: 700, easing: 'easeOutQuart' },
         plugins: {
-          legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } },
+          legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 10, usePointStyle: true } },
           tooltip: {
             callbacks: {
               label: (ctx) => {
-                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                const pct = total ? ((ctx.raw / total) * 100).toFixed(1) : 0;
-                return ` ${ctx.raw.toLocaleString()} (${pct}%)`;
+                const tot = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                const pct = tot ? ((ctx.raw / tot) * 100).toFixed(1) : 0;
+                return ` ${ctx.label}: ${pct}%`;
               }
             }
-          }
+          },
+          centerText: false
         },
-        cutout: '65%',
+        cutout: '68%',
         onClick: (evt, elements) => {
           if (!elements.length) return;
           toggleFilter('gender', GENDERS[elements[0].index]);
@@ -427,6 +494,9 @@ SPAR Dashboard{% endblock %}
     const ctx = document.getElementById('hourlyChart').getContext('2d');
     if (hourlyChart) hourlyChart.destroy();
     const BASE = '#DA291C';
+    const peak = Math.max(...(d.values.filter(v => v > 0)));
+    const yRange = dynamicYRange(d.values);
+
     hourlyChart = new Chart(ctx, {
       type: 'bar',
       data: {
@@ -434,19 +504,25 @@ SPAR Dashboard{% endblock %}
         datasets: [{
           label: d.is_avg ? 'Avg Visitors' : 'Visitors',
           data: d.values,
-          backgroundColor: d.labels.map((_, i) =>
-            F.hour !== null && i !== F.hour ? BASE + '40' : BASE + 'BB'
-          ),
-          borderRadius: 4,
+          backgroundColor: d.labels.map((_, i) => {
+            if (F.hour !== null) return i === F.hour ? BASE + 'EE' : BASE + '30';
+            return d.values[i] === peak ? BASE + 'EE' : BASE + '88';
+          }),
+          borderRadius: 6,
           borderSkipped: false,
         }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        animation: { duration: 650, easing: 'easeOutQuart' },
         plugins: { legend: { display: false } },
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 12, color: '#8492a6' } },
-          y: { grid: { color: '#f0f0f0' }, ticks: { font: { size: 10 }, color: '#8492a6' } }
+          y: {
+            grid: { color: '#f0f0f0' },
+            ticks: { font: { size: 10 }, color: '#8492a6' },
+            ...yRange,
+          }
         },
         onClick: (evt, elements) => {
           if (!elements.length) return;
@@ -493,27 +569,30 @@ SPAR Dashboard{% endblock %}
     const colors = BASE.slice(0, buckets.length).map((c, i) =>
       F.age && F.age !== buckets[i].key ? c + '28' : c
     );
+    const ageTotal = buckets.reduce((s, b) => s + b.count, 0);
     ageChart = new Chart(ctx, {
       type: 'doughnut',
       data: {
         labels: buckets.map(b => b.label),
-        datasets: [{ data: buckets.map(b => b.count), backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }]
+        datasets: [{ data: buckets.map(b => b.count), backgroundColor: colors, borderWidth: 2.5, borderColor: '#fff', hoverOffset: 6 }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
+        animation: { duration: 700, easing: 'easeOutQuart' },
         plugins: {
-          legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 12 } },
+          legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 10, boxWidth: 10, usePointStyle: true } },
           tooltip: {
             callbacks: {
               label: (ctx) => {
-                const total = ctx.dataset.data.reduce((a, b) => a + b, 0);
-                const pct = total ? ((ctx.raw / total) * 100).toFixed(1) : 0;
-                return ` ${ctx.raw.toLocaleString()} (${pct}%)`;
+                const tot = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                const pct = tot ? ((ctx.raw / tot) * 100).toFixed(1) : 0;
+                return ` ${ctx.label}: ${pct}%`;
               }
             }
-          }
+          },
+          centerText: false
         },
-        cutout: '60%',
+        cutout: '65%',
         onClick: (evt, elements) => {
           if (!elements.length) return;
           toggleFilter('age', ageData[elements[0].index].key);
@@ -528,10 +607,85 @@ SPAR Dashboard{% endblock %}
 
   // ── Load all ──────────────────────────────────────────────────────────────────
   function loadAll() {
+    // Check if a store is selected
+    if (!window.currentStoreCode) {
+      showNoStoreMessage();
+      return;
+    }
+    hideNoStoreMessage();
     loadOverview();
     loadTrend();
     loadHourly();
     loadAgeGroup();
+  }
+
+  // ── Show/hide no store selected message ────────────────────────────────────────
+  function showNoStoreMessage() {
+    const content = document.getElementById('mainContent');
+    content.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: center; height: 100%; flex-direction: column; gap: 16px; color: var(--muted);">
+        <i class="fa-solid fa-store" style="font-size: 48px; opacity: 0.3;"></i>
+        <div style="font-size: 14px; font-weight: 500;">Please select a store to view data</div>
+      </div>
+    `;
+  }
+
+  function hideNoStoreMessage() {
+    // Clear the message if it exists
+    const msgDiv = document.getElementById('mainContent').querySelector('[style*="display: flex"][style*="justify-content: center"]');
+    if (msgDiv && msgDiv.textContent.includes('Please select a store')) {
+      document.getElementById('mainContent').innerHTML = `
+        <div style="margin-bottom:10px;flex-shrink:0;">
+          <div style="font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">
+            <i class="fa-solid fa-users" style="font-size:10px;"></i> Footfall — Period Comparison
+          </div>
+          <div class="chip-row" id="periodChips">
+            <div class="spinner" style="width:18px;height:18px;border-width:2px;margin:0;"></div>
+          </div>
+        </div>
+        <div style="margin-bottom:8px;flex-shrink:0;">
+          <div style="font-size:10.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;">
+            <i class="fa-solid fa-chart-pie" style="font-size:10px;"></i> Visitor Breakdown &amp; Alerts — Selected Period
+          </div>
+          <div class="chip-row" id="kpiChips">
+            <div class="spinner" style="width:18px;height:18px;border-width:2px;margin:0;"></div>
+          </div>
+        </div>
+        <div id="filterStrip" style="display:none;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;flex-shrink:0;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:6px 12px;">
+          <span style="font-size:10.5px;font-weight:600;color:#92400e;"><i class="fa-solid fa-filter" style="font-size:9px;"></i> Active filters:</span>
+          <span id="filterChipsList" style="display:contents;"></span>
+          <button onclick="clearAllFilters()" style="margin-left:4px;font-size:10.5px;padding:2px 8px;border-radius:4px;border:1px solid #fcd34d;background:#fff8;cursor:pointer;color:#92400e;font-family:inherit;font-weight:500;">Clear all</button>
+        </div>
+        <div style="flex:1;min-height:400px;display:flex;flex-direction:column;gap:12px;">
+          <div style="display:grid;grid-template-columns:1.8fr 1fr;gap:12px;flex:1;min-height:0;">
+            <div class="card" style="display:flex;flex-direction:column;min-height:0;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <div class="card-title" style="margin:0;" id="trendTitle"><i class="fa-solid fa-chart-line" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>Daily Visitor Trend</div>
+                <div style="display:flex;gap:4px;">
+                  <button class="quick-btn active" id="btnVisitors" onclick="showTrend('visitors')" style="padding:2px 8px;font-size:10.5px;">Visitors</button>
+                  <button class="quick-btn" id="btnStaff" onclick="showTrend('staff')" style="padding:2px 8px;font-size:10.5px;">Staff</button>
+                </div>
+              </div>
+              <div style="flex:1;position:relative;min-height:0;"><canvas id="trendChart" style="position:absolute;inset:0;width:100%!important;height:100%!important;"></canvas></div>
+            </div>
+            <div class="card" style="display:flex;flex-direction:column;min-height:0;">
+              <div class="card-title"><i class="fa-solid fa-chart-pie" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>Visitor Breakdown<span id="breakdownNote" style="font-size:9px;font-weight:400;color:var(--muted);margin-left:4px;"></span></div>
+              <div style="flex:1;position:relative;min-height:0;"><canvas id="breakdownChart" style="position:absolute;inset:0;width:100%!important;height:100%!important;"></canvas></div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.8fr 1fr;gap:12px;flex:1;min-height:0;">
+            <div class="card" style="display:flex;flex-direction:column;min-height:0;">
+              <div class="card-title" id="hourlyTitle"><i class="fa-solid fa-clock" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>Avg Hourly Footfall</div>
+              <div style="flex:1;position:relative;min-height:0;"><canvas id="hourlyChart" style="position:absolute;inset:0;width:100%!important;height:100%!important;"></canvas></div>
+            </div>
+            <div class="card" style="display:flex;flex-direction:column;min-height:0;">
+              <div class="card-title"><i class="fa-solid fa-person" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>Age Group</div>
+              <div style="flex:1;position:relative;min-height:0;"><canvas id="ageChart" style="position:absolute;inset:0;width:100%!important;height:100%!important;"></canvas></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
   }
 
   // ── Init ──────────────────────────────────────────────────────────────────────
@@ -547,7 +701,18 @@ SPAR Dashboard{% endblock %}
     ht.value = 22;
     document.getElementById('dateFrom').value = offsetDate(29);
     document.getElementById('dateTo').value = todayStr();
-    loadAll();
+
+    // Wait for store code to be initialized and check if one is selected
+    const checkStoreInterval = setInterval(() => {
+      if (window.currentStoreCode !== undefined) {
+        clearInterval(checkStoreInterval);
+        loadAll();
+      }
+    }, 50);
+
+    // Also monitor store code changes
+    const storeDropdown = document.getElementById('globalStoreCode');
+    storeDropdown.addEventListener('change', loadAll);
   })();
 </script>
 {% endblock %}

@@ -1,0 +1,33 @@
+{
+  "stores": [
+    {
+      "code": "Spar-30003-FVM-Chennai",
+      "display_name": "Spar-30003-FVM-Chennai",
+      "images_folder": "C:\\Users\\ashit\\Documents\\Tarsyer\\Spar_new\\heatmap_snapshots\\Spar-30003-FVM-Chennai",
+      "created_date": "2026-04-07T17:54:58.453462",
+      "image_count": 20
+    },
+    {
+      "code": "10008_Sarath_Hyderabad",
+      "display_name": "Spar-10008-Sarath-Hyderabad",
+      "images_folder": "C:\\Users\\ashit\\Documents\\Tarsyer\\Spar_new\\heatmap_snapshots\\10008_Sarath_Hyderabad",
+      "created_date": "2026-04-08T11:13:03.379601",
+      "image_count": 10
+    },
+    {
+      "code": "Spar-20005-City-Center-Mall-Mangalore",
+      "display_name": "Spar-20005-City-Center-Mall-Mangalore",
+      "images_folder": "None",
+      "created_date": "2026-04-08T12:57:15.521865",
+      "image_count": 0
+    },
+    {
+      "code": "Spar-20015-PSN-Mall-Bangalore",
+      "display_name": "Spar-20015-PSN-Mall-Bangalore",
+      "images_folder": "None",
+      "created_date": "2026-04-08T12:57:55.730007",
+      "image_count": 0
+    }
+  ],
+  "last_updated": "2026-04-08T12:57:55.730007"
+}

@@ -4,6 +4,8 @@ from ..db import get_spar_db
 import pytz
 import csv
 import io
+import math
+import random
 import openpyxl
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
@@ -60,6 +62,13 @@ def hour_expr_str(hour_from, hour_to):
         {"$gte": [{"$substr": ["$date_time", 11, 2]}, f"{hour_from:02d}"]},
         {"$lte": [{"$substr": ["$date_time", 11, 2]}, f"{hour_to:02d}"]},
     ]}}
+
+def get_store_code():
+    """Parse store_code query param, default to first store."""
+    store_code = request.args.get("store_code", "").strip()
+    if store_code:
+        return store_code
+    return "Spar-20016-TSM-Mall-Udupi"  # Default store
 
 def get_pin_filters():
     """Parse cross-chart pin filter params."""
@@ -125,11 +134,14 @@ def get_last_month_range():
     last_month_start = (this_month_start - timedelta(days=1)).replace(day=1).strftime("%Y-%m-%d")
     return last_month_start, last_month_end
 
-def footfall_sum(col, from_str, to_exclusive_str):
+def footfall_sum(col, from_str, to_exclusive_str, store_code=None):
     """Aggregate visitor footfall totals from sparServer.footfall."""
     def conv(f): return {"$convert": {"input": f"${f}", "to": "int", "onError": 0, "onNull": 0}}
+    match_filter = str_date_filter(from_str, to_exclusive_str)
+    if store_code:
+        match_filter["store_code"] = store_code
     pipeline = [
-        {"$match": str_date_filter(from_str, to_exclusive_str)},
+        {"$match": match_filter},
         {"$group": {"_id": None, "total": {"$sum": {"$add": [
             conv("count_male"), conv("count_female"), conv("count_child")
         ]}}}},
@@ -147,6 +159,7 @@ def overview():
 
     date_from, date_to, date_to_ex = get_date_range()
     hour_from, hour_to = get_hour_range()
+    store_code = get_store_code()
 
     # Period comparison — visitor counts (no hour filter on chips)
     periods = {}
@@ -158,12 +171,13 @@ def overview():
         ("this_month", get_this_month_range()),
         ("last_month", get_last_month_range()),
     ]:
-        periods[label] = footfall_sum(ff_col, f, t)
+        periods[label] = footfall_sum(ff_col, f, t, store_code)
 
     pin_date, pin_hour, pin_gender, pin_age = get_pin_filters()
 
     # Effective date+hour filter (pin overrides range)
     bd_filt = pin_date_filt(pin_date) if pin_date else str_date_filter(date_from, date_to_ex)
+    bd_filt["store_code"] = store_code
     eff_h_from = pin_hour if pin_hour is not None else hour_from
     eff_h_to   = pin_hour if pin_hour is not None else hour_to
     bd_filt.update(hour_expr_str(eff_h_from, eff_h_to))
@@ -211,6 +225,7 @@ def trend():
     col = get_spar_db().footfall
     date_from, date_to, date_to_ex = get_date_range()
     hour_from, hour_to = get_hour_range()
+    store_code = get_store_code()
 
     pin_date, pin_hour, pin_gender, _ = get_pin_filters()
     vis_expr = gender_count_expr(pin_gender)
@@ -219,12 +234,14 @@ def trend():
     if pin_date:
         # Switch to hourly mode: show 24 hourly slots for that specific date
         filt = pin_date_filt(pin_date)
+        filt["store_code"] = store_code
         if pin_hour is not None:
             filt.update(hour_expr_str(pin_hour, pin_hour))
         group_id = {"$substr": ["$date_time", 11, 2]}   # "HH"
         mode = "hourly"
     else:
         filt = str_date_filter(date_from, date_to_ex)
+        filt["store_code"] = store_code
         h_from = pin_hour if pin_hour is not None else hour_from
         h_to   = pin_hour if pin_hour is not None else hour_to
         filt.update(hour_expr_str(h_from, h_to))
@@ -250,6 +267,7 @@ def trend():
 def hourly():
     col = get_spar_db().footfall
     date_from, date_to, date_to_ex = get_date_range()
+    store_code = get_store_code()
     pin_date, _ph, pin_gender, _ = get_pin_filters()
     vis_expr = gender_count_expr(pin_gender)
     hour_from, hour_to = get_hour_range()
@@ -257,7 +275,7 @@ def hourly():
 
     if pin_date:
         # Actual counts for that specific date (not average)
-        filt = {**pin_date_filt(pin_date), **hour_expr_str(hour_from, hour_to)}
+        filt = {**pin_date_filt(pin_date), **hour_expr_str(hour_from, hour_to), "store_code": store_code}
         rows = list(col.aggregate([
             {"$match": filt},
             {"$group": {"_id": {"$substr": ["$date_time", 11, 2]}, "total": {"$sum": vis_expr}}},
@@ -270,7 +288,7 @@ def hourly():
     else:
         # Average across date range
         rows = list(col.aggregate([
-            {"$match": {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to)}},
+            {"$match": {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to), "store_code": store_code}},
             {"$group": {
                 "_id":   {"$substr": ["$date_time", 11, 2]},
                 "total": {"$sum": vis_expr},
@@ -298,24 +316,42 @@ def hourly():
 def devices():
     db = get_spar_db()
     now = datetime.now(IST)
+    store_code = get_store_code()
 
     results = []
-    for col_name, label in [("footfall", "Footfall Camera"), ("heatmap", "Heatmap Camera")]:
+    for col_name, label in [("footfall", "Footfall Camera"), ("heatmap", "Heatmap Camera"), ("queue_length", "Queue Length Camera")]:
         col = db[col_name]
-        total = col.count_documents({})
+        total = col.count_documents({"store_code": store_code})
         if total == 0:
             continue
-        devices_in_col = col.distinct("device_serial_id")
+
+        # queue_length collection may not have device_serial_id; use camera_no instead
+        if col_name == "queue_length":
+            devices_in_col = col.distinct("camera_no", {"store_code": store_code})
+            id_field = "camera_no"
+        else:
+            devices_in_col = col.distinct("device_serial_id", {"store_code": store_code})
+            id_field = "device_serial_id"
+
         for dev_id in devices_in_col:
-            last_doc = col.find_one({"device_serial_id": dev_id}, sort=[("date_time", -1)])
+            last_doc = col.find_one({id_field: dev_id, "store_code": store_code}, sort=[("date_time", -1)])
             if not last_doc:
                 continue
             last_seen_str = last_doc.get("date_time","")
             camera = last_doc.get("camera_no","")
             store  = last_doc.get("store_code","")
-            # Parse last seen
+
+            # For queue_length, use camera_no as display device_id if no device_serial_id
+            display_id = last_doc.get("device_serial_id", "") if col_name != "queue_length" else (last_doc.get("device_serial_id", "") or f"Camera {dev_id}")
+
+            # Parse last seen — handle both "YYYY-MM-DD HH:MM:SS" and "YYYY-MM-DD_HH-MM-SS" formats
             try:
-                last_seen_dt = datetime.strptime(last_seen_str[:19], "%Y-%m-%d %H:%M:%S")
+                clean_str = last_seen_str[:19].replace("_", " ").replace("-", ":", 2)
+                # Fix: only replace hyphens in time portion, not date
+                date_part = last_seen_str[:10]
+                time_part = last_seen_str[11:19].replace("-", ":") if len(last_seen_str) >= 19 else ""
+                parse_str = f"{date_part} {time_part}" if time_part else date_part
+                last_seen_dt = datetime.strptime(parse_str, "%Y-%m-%d %H:%M:%S")
                 last_seen_dt = IST.localize(last_seen_dt)
                 diff_minutes = (now - last_seen_dt).total_seconds() / 60
                 if diff_minutes < 20:
@@ -331,7 +367,7 @@ def devices():
                 diff_minutes = 9999
 
             results.append({
-                "device_id": dev_id,
+                "device_id": display_id,
                 "collection": col_name,
                 "label": label,
                 "camera": camera,
@@ -352,9 +388,10 @@ def export_footfall():
     col = get_spar_db().footfall
     date_from, date_to, date_to_ex = get_date_range()
     hour_from, hour_to = get_hour_range()
+    store_code = get_store_code()
 
     docs = list(col.find(
-        {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to)}
+        {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to), "store_code": store_code}
     ).sort("date_time", -1).limit(5000))
 
     wb = openpyxl.Workbook()
@@ -399,7 +436,41 @@ def export_footfall():
 #  HEATMAP DATA
 # ─────────────────────────────────────────────
 
-# store_location → background image filename (without .jpg), section label
+# Dynamic location discovery based on available images
+import os
+
+def get_location_map(store_code):
+    """Dynamically build location map from available images in store folder."""
+    from pathlib import Path
+    import re
+
+    store_folder = Path(__file__).parent.parent / "static" / "img" / "heatmap" / store_code
+    location_map = {}
+
+    if not store_folder.exists():
+        return {}
+
+    # Find all .jpg files and extract location info
+    for img_file in sorted(store_folder.glob("location*.jpg")):
+        filename = img_file.stem  # filename without .jpg
+        # Extract location code (e.g., "location01" from "location01- FMCG Food")
+        match = re.match(r"(location\d+)", filename)
+        if match:
+            location_id = match.group(1)
+            # Extract label (everything after " - ")
+            if " - " in filename:
+                label = filename.split(" - ", 1)[1]
+            else:
+                label = filename.replace(location_id, "").strip(" - ")
+
+            location_map[location_id] = {
+                "image": filename,
+                "label": label or location_id
+            }
+
+    return location_map
+
+# Legacy static map for backward compatibility
 LOCATION_MAP = {
     "location01": {"image": "location01- FMCG Food",      "label": "FMCG Food"},
     "location02": {"image": "location02- Grocery",         "label": "Grocery"},
@@ -419,8 +490,12 @@ def heatmap_data():
     location  = request.args.get("location", "location01")
     hour_from = int(request.args.get("hour_from", 0))
     hour_to   = int(request.args.get("hour_to",  23))
+    store_code = get_store_code()
 
-    if location not in LOCATION_MAP:
+    # Get dynamic location map for this store
+    location_map = get_location_map(store_code) or LOCATION_MAP
+
+    if location not in location_map:
         return jsonify({"error": "Unknown location"}), 400
 
     col = get_spar_db().heatmap
@@ -430,7 +505,7 @@ def heatmap_data():
     dates = [d.strip() for d in dates_param.split(",") if d.strip()]
 
     if not dates:
-        latest = col.find_one({"store_location": location}, sort=[("date_time", -1)])
+        latest = col.find_one({"store_location": location, "store_code": store_code}, sort=[("date_time", -1)])
         dates = [latest["date_time"][:10]] if latest else []
         if not dates:
             return jsonify({"frames": [], "total": {"male": 0, "female": 0, "child": 0, "staff": 0}})
@@ -448,9 +523,9 @@ def heatmap_data():
         or_conditions.append({"date_time": {"$gte": tf, "$lt": tt}})
 
     if len(or_conditions) == 1:
-        filt = {"store_location": location, **or_conditions[0]}
+        filt = {"store_location": location, "store_code": store_code, **or_conditions[0]}
     else:
-        filt = {"store_location": location, "$or": or_conditions}
+        filt = {"store_location": location, "store_code": store_code, "$or": or_conditions}
 
     docs = list(col.find(
         filt,
@@ -496,17 +571,19 @@ def heatmap_data():
         if not multi:
             slot["datetime"] = doc["date_time"]
 
-    loc_info = LOCATION_MAP[location]
+    loc_info = location_map[location]
+    # Build store-specific image path
+    store_image = f"/static/img/heatmap/{store_code}/{loc_info['image']}.jpg"
     return jsonify({
         "location":  location,
-        "image":     loc_info["image"],
+        "image":     store_image,
         "label":     loc_info["label"],
         "dates":     dates,
         "hour_from": hour_from,
         "hour_to":   hour_to,
         "frames":    list(slots.values()),
         "total":     total,
-        "locations": [{"id": k, "label": v["label"]} for k, v in LOCATION_MAP.items()],
+        "locations": [{"id": k, "label": v["label"]} for k, v in location_map.items()],
     })
 
 @api_bp.route("/heatmap-table")
@@ -524,9 +601,13 @@ def heatmap_table():
     dates = [d.strip() for d in dates_param.split(",") if d.strip()]
     hour_from = int(request.args.get("hour_from", 9))
     hour_to   = int(request.args.get("hour_to",  22))
+    store_code = get_store_code()
 
     if not dates:
         return jsonify({"error": "No dates provided"}), 400
+
+    # Use dynamic location map for this store (falls back to legacy map)
+    location_map = get_location_map(store_code) or LOCATION_MAP
 
     col = get_spar_db().heatmap
 
@@ -542,6 +623,7 @@ def heatmap_table():
         or_conditions.append({"date_time": {"$gte": tf, "$lt": tt}})
 
     filt = or_conditions[0] if len(or_conditions) == 1 else {"$or": or_conditions}
+    filt["store_code"] = store_code
 
     docs = list(col.find(filt, {"date_time": 1, "store_location": 1, "count": 1, "_id": 0}))
 
@@ -564,7 +646,7 @@ def heatmap_table():
         if hour_str not in hours_set:
             continue
         loc = doc.get("store_location", "")
-        if loc not in LOCATION_MAP:
+        if loc not in location_map:
             continue
 
         cnt = doc.get("count") or {}
@@ -584,7 +666,7 @@ def heatmap_table():
     table = {}
     for h in hours:
         table[h] = {}
-        for loc in LOCATION_MAP:
+        for loc in location_map:
             hour_data = presence[loc].get(h, {})
             total_mins = sum(len(mins) for mins in hour_data.values())
             avg_mins   = round(total_mins / n_dates) if n_dates else 0
@@ -597,7 +679,7 @@ def heatmap_table():
                 "staff":   c["staff"],
             }
 
-    sections    = [{"id": k, "label": v["label"]} for k, v in LOCATION_MAP.items()]
+    sections    = [{"id": k, "label": v["label"]} for k, v in location_map.items()]
     hour_labels = [f"{h}:00" for h in hours]
 
     return jsonify({
@@ -609,15 +691,35 @@ def heatmap_table():
     })
 
 
+@api_bp.route("/heatmap-locations")
+@login_required_api
+def heatmap_locations():
+    """Return available locations/cameras for the selected store."""
+    store_code = get_store_code()
+
+    # Get dynamic location map for this store
+    location_map = get_location_map(store_code) or LOCATION_MAP
+
+    cameras = [
+        {"camera_id": loc_id, "name": loc_info["label"]}
+        for loc_id, loc_info in location_map.items()
+    ]
+    return jsonify({"cameras": cameras})
+
 @api_bp.route("/heatmap-dates")
 @login_required_api
 def heatmap_dates():
     """Return distinct dates available per store location."""
     location = request.args.get("location", "location01")
-    if location not in LOCATION_MAP:
+    store_code = get_store_code()
+
+    # Get dynamic location map for this store
+    location_map = get_location_map(store_code) or LOCATION_MAP
+
+    if location not in location_map:
         return jsonify({"dates": []})
     col  = get_spar_db().heatmap
-    docs = list(col.find({"store_location": location}, {"date_time": 1, "_id": 0}))
+    docs = list(col.find({"store_location": location, "store_code": store_code}, {"date_time": 1, "_id": 0}))
     dates = sorted({d["date_time"][:10] for d in docs})
     return jsonify({"dates": dates})
 
@@ -630,11 +732,13 @@ def queue_stats():
     db = get_spar_db()
     date_from, date_to, date_to_ex = get_date_range()
     hour_from, hour_to = get_hour_range()
+    store_code = get_store_code()
     col = db.queue_length
 
     # date_time format: "YYYY-MM-DD_HH-MM-SS"
     # str_date_filter still works — lexicographic ordering is preserved
     filt = str_date_filter(date_from, date_to_ex)
+    filt["store_code"] = store_code
     filt.update(hour_expr_str(hour_from, hour_to))
 
     docs = list(col.find(filt, {
@@ -671,7 +775,11 @@ def queue_stats():
                 flat.extend(v for v in sublist if isinstance(v, (int, float)) and v > 0)
         ql = (sum(flat) / len(flat)) if flat else None
         if ql is not None:
-            cs["queue_lengths"].append(ql)
+            # Stochastic rounding: randomly ceil or floor weighted by fractional part
+            frac = ql - math.floor(ql)
+            ql_rounded = math.ceil(ql) if random.random() < frac else math.floor(ql)
+            ql_rounded = max(ql_rounded, 1)  # ensure at least 1 if there was a detection
+            cs["queue_lengths"].append(float(ql_rounded))
 
         # Hourly bucket: date_time[11:13] = "HH" for "YYYY-MM-DD_HH-MM-SS"
         dt_str = doc.get("date_time", "")
@@ -695,8 +803,8 @@ def queue_stats():
             "camera_no":    cam_no,
             "label":        f"Counter {cam_no}",
             "avg_wait_min": round(sum(wt)  / len(wt),  2) if wt  else 0,
-            "avg_queue":    round(sum(qlv) / len(qlv), 1) if qlv else 0,
-            "max_queue":    round(max(qlv), 1)             if qlv else 0,
+            "avg_queue":    round(sum(qlv) / len(qlv)) if qlv else 0,
+            "max_queue":    round(max(qlv))            if qlv else 0,
             "observations": len(wt),
         })
 
@@ -704,7 +812,7 @@ def queue_stats():
     all_waits  = [w for cs in cam_stats.values() for w in cs["wait_times"]]
     all_queues = [q for cs in cam_stats.values() for q in cs["queue_lengths"]]
     overall_avg_wait  = round(sum(all_waits)  / len(all_waits),  2) if all_waits  else 0
-    overall_avg_queue = round(sum(all_queues) / len(all_queues), 1) if all_queues else 0
+    overall_avg_queue = round(sum(all_queues) / len(all_queues)) if all_queues else 0
     active_counters   = len([c for c in cameras if c["observations"] > 0])
 
     # Global hourly averages (all counters combined)
@@ -721,7 +829,7 @@ def queue_stats():
         for h in range(hour_from, hour_to + 1)
     ]
     hourly_queue_vals = [
-        round(sum(g_hq[h]) / len(g_hq[h]), 1) if g_hq.get(h) else None
+        round(sum(g_hq[h]) / len(g_hq[h])) if g_hq.get(h) else None
         for h in range(hour_from, hour_to + 1)
     ]
 
@@ -734,7 +842,7 @@ def queue_stats():
             wvals = cs["hourly_wait"].get(h, [])
             qvals = cs["hourly_queue"].get(h, [])
             hw.append(round(sum(wvals) / len(wvals), 2) if wvals else None)
-            hq.append(round(sum(qvals) / len(qvals), 1) if qvals else None)
+            hq.append(round(sum(qvals) / len(qvals)) if qvals else None)
         per_counter_hourly.append({
             "camera_no": cam_no,
             "label":     f"Counter {cam_no}",
@@ -764,11 +872,12 @@ def queue_stats():
 def dwell():
     """Aggregate dwell-time bucket counts from sparServer.dwell_time_summary."""
     db = get_spar_db()
+    store_code = get_store_code()
     date_from, date_to, date_to_ex = get_date_range()
     hour_from, hour_to = get_hour_range()
 
     daily_pipeline = [
-        {"$match": {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to)}},
+        {"$match": {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to), "store_code": store_code}},
         {"$group": {
             "_id":   {"$substr": ["$date_time", 0, 10]},
             "lt2":   {"$sum": "$dwell_store_count_less_than_2_minutes"},
@@ -804,10 +913,12 @@ def age_group():
     db = get_spar_db()
     date_from, date_to, date_to_ex = get_date_range()
     hour_from, hour_to = get_hour_range()
+    store_code = get_store_code()
 
     pin_date, pin_hour, pin_gender, _ = get_pin_filters()
 
     filt = pin_date_filt(pin_date) if pin_date else str_date_filter(date_from, date_to_ex)
+    filt["store_code"] = store_code
     eff_h_from = pin_hour if pin_hour is not None else hour_from
     eff_h_to   = pin_hour if pin_hour is not None else hour_to
     filt.update(hour_expr_str(eff_h_from, eff_h_to))
