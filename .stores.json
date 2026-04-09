@@ -27,7 +27,98 @@
       "images_folder": "None",
       "created_date": "2026-04-08T12:57:55.730007",
       "image_count": 0
+    },
+    {
+      "code": "30001-BROOKEFIELDS-MALL-COIMBATORE",
+      "display_name": "Spar-30001-Brookefields-Mall-Coimbatore",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:39.965892",
+      "image_count": 0
+    },
+    {
+      "code": "Spar-50005-Spectrum-Mall-Noida",
+      "display_name": "Spar-50005-Spectrum-Mall-Noida",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:40.374430",
+      "image_count": 0
+    },
+    {
+      "code": "20003_spar_mantri_mall",
+      "display_name": "Spar-20003-Mantri-Mall",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:40.899447",
+      "image_count": 0
+    },
+    {
+      "code": "Spar-20016-TSM-Mall-Udupi",
+      "display_name": "Spar-20016-TSM-Mall-Udupi",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:41.218779",
+      "image_count": 16
+    },
+    {
+      "code": "SPAR-20009-FORUM-MALL-MANGALORE",
+      "display_name": "Spar-20009-Forum-Mall-Mangalore",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:41.430155",
+      "image_count": 0
+    },
+    {
+      "code": "Spar-30006-VRMAllchennai",
+      "display_name": "Spar-30006-VR-Mall-Chennai",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:41.872517",
+      "image_count": 0
+    },
+    {
+      "code": "Spar-30008-Langval-mall-Thanjavur",
+      "display_name": "Spar-30008-Langval-Mall-Thanjavur",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:42.152443",
+      "image_count": 18
+    },
+    {
+      "code": "Spar-10004-Forum-Mall-Hyderabad",
+      "display_name": "Spar-10004-Forum-Mall-Hyderabad",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:42.486763",
+      "image_count": 0
+    },
+    {
+      "code": "Spar-30005-Prozone-Mall-Coimbatore",
+      "display_name": "Spar-30005-Prozone-Mall-Coimbatore",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:42.737777",
+      "image_count": 0
+    },
+    {
+      "code": "Spar-20007OMR",
+      "display_name": "Spar-20007-OMR",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:43.538501",
+      "image_count": 0
+    },
+    {
+      "code": "Spar-60003-Vegas-Mall-Delhi",
+      "display_name": "Spar-60003-Vegas-Mall-Delhi",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:43.912177",
+      "image_count": 0
+    },
+    {
+      "code": "SPAR-30007-Marina-Mall-Chennai",
+      "display_name": "Spar-30007-Marina-Mall-Chennai",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:33:44.217082",
+      "image_count": 0
+    },
+    {
+      "code": "Spar-20014-RMZ-Mall-Bangalore",
+      "display_name": "Spar-20014-RMZ-Mall-Bangalore",
+      "images_folder": "None",
+      "created_date": "2026-04-09T16:49:51.887030",
+      "image_count": 0
     }
   ],
-  "last_updated": "2026-04-08T12:57:55.730007"
+  "last_updated": "2026-04-09T16:49:51.887947"
 }

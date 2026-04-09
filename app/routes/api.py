@@ -801,7 +801,7 @@ def queue_stats():
         qlv = cs["queue_lengths"]
         cameras.append({
             "camera_no":    cam_no,
-            "label":        f"Counter {cam_no}",
+            "label":        f"Channel {cam_no}",
             "avg_wait_min": round(sum(wt)  / len(wt),  2) if wt  else 0,
             "avg_queue":    round(sum(qlv) / len(qlv)) if qlv else 0,
             "max_queue":    round(max(qlv))            if qlv else 0,
@@ -845,7 +845,7 @@ def queue_stats():
             hq.append(round(sum(qvals) / len(qvals)) if qvals else None)
         per_counter_hourly.append({
             "camera_no": cam_no,
-            "label":     f"Counter {cam_no}",
+            "label":     f"Channel {cam_no}",
             "wait":      hw,
             "queue":     hq,
         })

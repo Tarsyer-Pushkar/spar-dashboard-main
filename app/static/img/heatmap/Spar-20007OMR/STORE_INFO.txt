@@ -1,0 +1,25 @@
+Store Information
+==================
+
+Store Code: Spar-20007OMR
+Display Name: Spar-20007-OMR
+Created: 2026-04-09 16:33:43
+
+Folder Structure:
+  └── Spar-20007OMR/
+      ├── location01- Name.jpg
+      ├── location02- Name.jpg
+      └── ... (any number of location images)
+
+To add more images:
+  python scripts/setup_store_images.py --store-code "Spar-20007OMR" --source-folder "/path/to/images"
+
+Image Naming Convention:
+  location{number}- {description}.jpg
+  Example: location01- FMCG Food.jpg
+
+Notes:
+  - Images are automatically discovered by the heatmap module
+  - No fixed number of images required
+  - Different stores can have different location counts
+  - Images can be added/updated anytime without code changes

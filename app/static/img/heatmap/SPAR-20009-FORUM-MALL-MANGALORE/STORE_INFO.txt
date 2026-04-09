@@ -1,0 +1,25 @@
+Store Information
+==================
+
+Store Code: SPAR-20009-FORUM-MALL-MANGALORE
+Display Name: Spar-20009-Forum-Mall-Mangalore
+Created: 2026-04-09 16:33:41
+
+Folder Structure:
+  └── SPAR-20009-FORUM-MALL-MANGALORE/
+      ├── location01- Name.jpg
+      ├── location02- Name.jpg
+      └── ... (any number of location images)
+
+To add more images:
+  python scripts/setup_store_images.py --store-code "SPAR-20009-FORUM-MALL-MANGALORE" --source-folder "/path/to/images"
+
+Image Naming Convention:
+  location{number}- {description}.jpg
+  Example: location01- FMCG Food.jpg
+
+Notes:
+  - Images are automatically discovered by the heatmap module
+  - No fixed number of images required
+  - Different stores can have different location counts
+  - Images can be added/updated anytime without code changes

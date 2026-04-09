@@ -76,7 +76,7 @@
   <button class="btn btn-outline" onclick="resetDates()">Reset</button>
   <div style="margin-left:auto; display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted);">
     <i class="fa-solid fa-circle-info" style="font-size:12px;"></i>
-    Billing counter wait &amp; queue data
+    Billing channel wait &amp; queue data
   </div>
 </div>
 
@@ -88,7 +88,7 @@
     <div class="stat-card kpi-wait">
       <div class="stat-label">Avg Wait Time</div>
       <div class="stat-value" id="kpi-wait">—</div>
-      <div class="stat-sub">across all counters</div>
+      <div class="stat-sub">across all channels</div>
     </div>
     <div class="stat-card kpi-queue">
       <div class="stat-label">Avg Queue Length</div>
@@ -96,9 +96,9 @@
       <div class="stat-sub">people in queue</div>
     </div>
     <div class="stat-card kpi-counters">
-      <div class="stat-label">Active Counters</div>
+      <div class="stat-label">Active Channels</div>
       <div class="stat-value" id="kpi-counters">—</div>
-      <div class="stat-sub">billing counters</div>
+      <div class="stat-sub">billing channels</div>
     </div>
     <div class="stat-card kpi-obs">
       <div class="stat-label">Observations</div>
@@ -112,14 +112,14 @@
     <div class="card">
       <div class="card-title">
         <i class="fa-solid fa-clock" style="color:#3b7dd8; margin-right:5px;"></i>
-        Avg Wait Time by Counter (min)
+        Avg Wait Time by Channel (min)
       </div>
       <canvas id="waitBarChart" height="170"></canvas>
     </div>
     <div class="card">
       <div class="card-title">
         <i class="fa-solid fa-people-line" style="color:#16a37a; margin-right:5px;"></i>
-        Avg Queue Length by Counter
+        Avg Queue Length by Channel
       </div>
       <canvas id="queueBarChart" height="170"></canvas>
     </div>
@@ -147,7 +147,7 @@
   <div class="card" style="margin-bottom:10px;">
     <div class="card-title" style="margin-bottom:12px;">
       <i class="fa-solid fa-table-list" style="color:var(--muted); margin-right:5px;"></i>
-      Counter Summary
+      Channel Summary
     </div>
     <div class="table-wrap" id="summary-wrap">
       <div class="load-msg">
@@ -335,7 +335,7 @@
 
     // Overall average as dashed reference line
     const overallWaitDS = {
-      label: 'All Counters',
+      label: 'All Channels',
       data: d.hourly_wait,
       borderColor: '#8492a6',
       backgroundColor: 'rgba(132,146,166,.06)',
@@ -347,7 +347,7 @@
       fill: false,
       order: 99,
     };
-    const overallQueueDS = { ...overallWaitDS, label: 'All Counters', data: d.hourly_queue };
+    const overallQueueDS = { ...overallWaitDS, label: 'All Channels', data: d.hourly_queue };
 
     const waitDatasets = perCounter.map((c, i) => ({
       label: c.label,
@@ -471,7 +471,7 @@
     <table>
       <thead>
         <tr>
-          <th>Counter</th>
+          <th>Channel</th>
           <th style="text-align:right;">Avg Wait Time</th>
           <th style="text-align:right;">Avg Queue</th>
           <th style="text-align:right;">Max Queue</th>

@@ -1,0 +1,25 @@
+Store Information
+==================
+
+Store Code: SPAR-30007-Marina-Mall-Chennai
+Display Name: Spar-30007-Marina-Mall-Chennai
+Created: 2026-04-09 16:33:44
+
+Folder Structure:
+  └── SPAR-30007-Marina-Mall-Chennai/
+      ├── location01- Name.jpg
+      ├── location02- Name.jpg
+      └── ... (any number of location images)
+
+To add more images:
+  python scripts/setup_store_images.py --store-code "SPAR-30007-Marina-Mall-Chennai" --source-folder "/path/to/images"
+
+Image Naming Convention:
+  location{number}- {description}.jpg
+  Example: location01- FMCG Food.jpg
+
+Notes:
+  - Images are automatically discovered by the heatmap module
+  - No fixed number of images required
+  - Different stores can have different location counts
+  - Images can be added/updated anytime without code changes
