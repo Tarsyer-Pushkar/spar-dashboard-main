@@ -11,6 +11,17 @@ def create_app():
 
     init_db(app)
 
+    @app.context_processor
+    def inject_stores():
+        import json
+        stores_file = os.path.join(app.root_path, '..', 'stores.json')
+        try:
+            with open(stores_file, 'r') as f:
+                stores = json.load(f)
+        except Exception:
+            stores = []
+        return dict(stores=stores)
+
     from .routes.auth import auth_bp
     from .routes.dashboard import dashboard_bp
     from .routes.api import api_bp
