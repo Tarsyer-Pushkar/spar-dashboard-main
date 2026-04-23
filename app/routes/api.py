@@ -173,39 +173,25 @@ def overview():
     ]:
         periods[label] = footfall_sum(ff_col, f, t, store_code)
 
-    pin_date, pin_hour, pin_gender, pin_age = get_pin_filters()
-
-    # Effective date+hour filter (pin overrides range)
-    bd_filt = pin_date_filt(pin_date) if pin_date else str_date_filter(date_from, date_to_ex)
+    # Effective date+hour filter
+    bd_filt = str_date_filter(date_from, date_to_ex)
     bd_filt["store_code"] = store_code
-    eff_h_from = pin_hour if pin_hour is not None else hour_from
-    eff_h_to   = pin_hour if pin_hour is not None else hour_to
-    bd_filt.update(hour_expr_str(eff_h_from, eff_h_to))
+    bd_filt.update(hour_expr_str(hour_from, hour_to))
 
-    if pin_age:
-        # Gender breakdown from age_group collection for that age group
-        age_docs = list(get_spar_db().age_group.aggregate([
-            {"$match": {"age_group": pin_age, **bd_filt}},
-            {"$group": {"_id": "$gender", "count": {"$sum": 1}}},
-        ]))
-        breakdown = {"male": 0, "female": 0, "child": 0, "staff": 0}
-        for d in age_docs:
-            if d["_id"] in breakdown:
-                breakdown[d["_id"]] = d["count"]
-    else:
-        def conv(f): return {"$convert": {"input": f"${f}", "to": "int", "onError": 0, "onNull": 0}}
-        ff = list(ff_col.aggregate([
-            {"$match": bd_filt},
-            {"$group": {
-                "_id":    None,
-                "male":   {"$sum": conv("count_male")},
-                "female": {"$sum": conv("count_female")},
-                "child":  {"$sum": conv("count_child")},
-                "staff":  {"$sum": conv("count_staff")},
-            }}
-        ]))
-        breakdown = ff[0] if ff else {"male": 0, "female": 0, "child": 0, "staff": 0}
-        breakdown.pop("_id", None)
+    # Always get breakdown from footfall collection
+    def conv(f): return {"$convert": {"input": f"${f}", "to": "int", "onError": 0, "onNull": 0}}
+    ff = list(ff_col.aggregate([
+        {"$match": bd_filt},
+        {"$group": {
+            "_id":    None,
+            "male":   {"$sum": conv("count_male")},
+            "female": {"$sum": conv("count_female")},
+            "child":  {"$sum": conv("count_child")},
+            "staff":  {"$sum": conv("count_staff")},
+        }}
+    ]))
+    breakdown = ff[0] if ff else {"male": 0, "female": 0, "child": 0, "staff": 0}
+    breakdown.pop("_id", None)
     total_visitors = breakdown.get("male", 0) + breakdown.get("female", 0) + breakdown.get("child", 0)
 
     return jsonify({
@@ -227,37 +213,28 @@ def trend():
     hour_from, hour_to = get_hour_range()
     store_code = get_store_code()
 
-    pin_date, pin_hour, pin_gender, _ = get_pin_filters()
-    vis_expr = gender_count_expr(pin_gender)
+    # Always show daily trend
     stf_expr = {"$convert": {"input": "$count_staff", "to": "int", "onError": 0, "onNull": 0}}
+    vis_expr = {"$add": [
+        {"$convert": {"input": "$count_male", "to": "int", "onError": 0, "onNull": 0}},
+        {"$convert": {"input": "$count_female", "to": "int", "onError": 0, "onNull": 0}},
+        {"$convert": {"input": "$count_child", "to": "int", "onError": 0, "onNull": 0}}
+    ]}
 
-    if pin_date:
-        # Switch to hourly mode: show 24 hourly slots for that specific date
-        filt = pin_date_filt(pin_date)
-        filt["store_code"] = store_code
-        if pin_hour is not None:
-            filt.update(hour_expr_str(pin_hour, pin_hour))
-        group_id = {"$substr": ["$date_time", 11, 2]}   # "HH"
-        mode = "hourly"
-    else:
-        filt = str_date_filter(date_from, date_to_ex)
-        filt["store_code"] = store_code
-        h_from = pin_hour if pin_hour is not None else hour_from
-        h_to   = pin_hour if pin_hour is not None else hour_to
-        filt.update(hour_expr_str(h_from, h_to))
-        group_id = {"$substr": ["$date_time", 0, 10]}   # "YYYY-MM-DD"
-        mode = "daily"
+    filt = str_date_filter(date_from, date_to_ex)
+    filt["store_code"] = store_code
+    filt.update(hour_expr_str(hour_from, hour_to))
 
     rows = list(col.aggregate([
         {"$match": filt},
-        {"$group": {"_id": group_id, "visitors": {"$sum": vis_expr}, "staff": {"$sum": stf_expr}}},
+        {"$group": {"_id": {"$substr": ["$date_time", 0, 10]}, "visitors": {"$sum": vis_expr}, "staff": {"$sum": stf_expr}}},
         {"$sort": {"_id": 1}}
     ]))
 
     labels   = [r["_id"]      for r in rows]
     visitors = [r["visitors"] for r in rows]
     staff    = [r["staff"]    for r in rows]
-    return jsonify({"labels": labels, "visitors": visitors, "staff": staff, "mode": mode})
+    return jsonify({"labels": labels, "visitors": visitors, "staff": staff, "mode": "daily"})
 
 # ─────────────────────────────────────────────
 #  HOURLY FOOTFALL
@@ -268,45 +245,34 @@ def hourly():
     col = get_spar_db().footfall
     date_from, date_to, date_to_ex = get_date_range()
     store_code = get_store_code()
-    pin_date, _ph, pin_gender, _ = get_pin_filters()
-    vis_expr = gender_count_expr(pin_gender)
     hour_from, hour_to = get_hour_range()
     hour_map = {f"{h:02d}": 0 for h in range(hour_from, hour_to + 1)}
 
-    if pin_date:
-        # Actual counts for that specific date (not average)
-        filt = {**pin_date_filt(pin_date), **hour_expr_str(hour_from, hour_to), "store_code": store_code}
-        rows = list(col.aggregate([
-            {"$match": filt},
-            {"$group": {"_id": {"$substr": ["$date_time", 11, 2]}, "total": {"$sum": vis_expr}}},
-            {"$sort": {"_id": 1}}
-        ]))
-        for r in rows:
-            if r["_id"] in hour_map:
-                hour_map[r["_id"]] = r["total"]
-        is_avg = False
-    else:
-        # Average across date range
-        rows = list(col.aggregate([
-            {"$match": {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to), "store_code": store_code}},
-            {"$group": {
-                "_id":   {"$substr": ["$date_time", 11, 2]},
-                "total": {"$sum": vis_expr},
-                "dates": {"$addToSet": {"$substr": ["$date_time", 0, 10]}},
-            }},
-            {"$sort": {"_id": 1}}
-        ]))
-        for r in rows:
-            if r["_id"] in hour_map:
-                n = len(r["dates"])
-                hour_map[r["_id"]] = round(r["total"] / n) if n else 0
-        is_avg = True
+    # Always show average across date range
+    vis_expr = {"$add": [
+        {"$convert": {"input": "$count_male", "to": "int", "onError": 0, "onNull": 0}},
+        {"$convert": {"input": "$count_female", "to": "int", "onError": 0, "onNull": 0}},
+        {"$convert": {"input": "$count_child", "to": "int", "onError": 0, "onNull": 0}}
+    ]}
+
+    rows = list(col.aggregate([
+        {"$match": {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to), "store_code": store_code}},
+        {"$group": {
+            "_id":   {"$substr": ["$date_time", 11, 2]},
+            "total": {"$sum": vis_expr},
+            "dates": {"$addToSet": {"$substr": ["$date_time", 0, 10]}},
+        }},
+        {"$sort": {"_id": 1}}
+    ]))
+    for r in rows:
+        if r["_id"] in hour_map:
+            n = len(r["dates"])
+            hour_map[r["_id"]] = round(r["total"] / n) if n else 0
 
     labels = [f"{h:02d}:00" for h in range(hour_from, hour_to + 1)]
     values = [hour_map[f"{h:02d}"] for h in range(hour_from, hour_to + 1)]
     return jsonify({"labels": labels, "values": values,
-                    "date_from": date_from, "date_to": date_to,
-                    "pin_date": pin_date, "is_avg": is_avg})
+                    "date_from": date_from, "date_to": date_to, "is_avg": True})
 
 # ─────────────────────────────────────────────
 #  DEVICE STATUS (derived from last data received)
@@ -390,18 +356,32 @@ def export_footfall():
     hour_from, hour_to = get_hour_range()
     store_code = get_store_code()
 
-    docs = list(col.find(
-        {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to), "store_code": store_code}
-    ).sort("date_time", -1).limit(5000))
+    # Aggregate data by hour using MongoDB pipeline
+    pipeline = [
+        {"$match": {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to), "store_code": store_code}},
+        {"$group": {
+            "_id": {
+                "date": {"$substr": ["$date_time", 0, 10]},
+                "hour": {"$substr": ["$date_time", 11, 2]}
+            },
+            "male": {"$sum": {"$convert": {"input": "$count_male", "to": "int", "onError": 0, "onNull": 0}}},
+            "female": {"$sum": {"$convert": {"input": "$count_female", "to": "int", "onError": 0, "onNull": 0}}},
+            "child": {"$sum": {"$convert": {"input": "$count_child", "to": "int", "onError": 0, "onNull": 0}}},
+            "staff": {"$sum": {"$convert": {"input": "$count_staff", "to": "int", "onError": 0, "onNull": 0}}},
+        }},
+        {"$sort": {"_id.date": 1, "_id.hour": 1}}
+    ]
+
+    docs = list(col.aggregate(pipeline))
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Footfall"
+    ws.title = "Footfall Hourly"
 
     header_fill = PatternFill("solid", fgColor="DA291C")
     header_font = Font(bold=True, color="FFFFFF", size=11)
 
-    headers = ["Date/Time", "Male", "Female", "Child", "Staff", "Total Visitors"]
+    headers = ["Date", "Hour", "Male", "Female", "Child", "Staff", "Total Visitors"]
     for ci, h in enumerate(headers, 1):
         cell = ws.cell(row=1, column=ci, value=h)
         cell.fill = header_fill
@@ -409,16 +389,20 @@ def export_footfall():
         cell.alignment = Alignment(horizontal="center")
 
     for ri, d in enumerate(docs, 2):
-        m  = int(d.get("count_male",  0) or 0)
-        f_ = int(d.get("count_female",0) or 0)
-        c  = int(d.get("count_child", 0) or 0)
-        s  = int(d.get("count_staff", 0) or 0)
-        ws.cell(row=ri, column=1, value=d.get("date_time", ""))
-        ws.cell(row=ri, column=2, value=m)
-        ws.cell(row=ri, column=3, value=f_)
-        ws.cell(row=ri, column=4, value=c)
-        ws.cell(row=ri, column=5, value=s)
-        ws.cell(row=ri, column=6, value=m + f_ + c)
+        m = d.get("male", 0)
+        f_ = d.get("female", 0)
+        c = d.get("child", 0)
+        s = d.get("staff", 0)
+        date_val = d["_id"]["date"]
+        hour_val = d["_id"]["hour"]
+
+        ws.cell(row=ri, column=1, value=date_val)
+        ws.cell(row=ri, column=2, value=f"{hour_val}:00")
+        ws.cell(row=ri, column=3, value=m)
+        ws.cell(row=ri, column=4, value=f_)
+        ws.cell(row=ri, column=5, value=c)
+        ws.cell(row=ri, column=6, value=s)
+        ws.cell(row=ri, column=7, value=m + f_ + c)
 
     for i, col_dim in enumerate(ws.columns, 1):
         ws.column_dimensions[get_column_letter(i)].width = 18
@@ -429,7 +413,7 @@ def export_footfall():
     return Response(
         buf.read(),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment;filename=spar_footfall_{date_from}_{date_to}.xlsx"}
+        headers={"Content-Disposition": f"attachment;filename=spar_footfall_hourly_{date_from}_{date_to}.xlsx"}
     )
 
 # ─────────────────────────────────────────────
@@ -915,18 +899,12 @@ def age_group():
     hour_from, hour_to = get_hour_range()
     store_code = get_store_code()
 
-    pin_date, pin_hour, pin_gender, _ = get_pin_filters()
-
-    filt = pin_date_filt(pin_date) if pin_date else str_date_filter(date_from, date_to_ex)
+    filt = str_date_filter(date_from, date_to_ex)
     filt["store_code"] = store_code
-    eff_h_from = pin_hour if pin_hour is not None else hour_from
-    eff_h_to   = pin_hour if pin_hour is not None else hour_to
-    filt.update(hour_expr_str(eff_h_from, eff_h_to))
+    filt.update(hour_expr_str(hour_from, hour_to))
 
     VALID_GROUPS = {"Under 18", "18-25", "25-35", "35-45", "45+"}
     filt["age_group"] = {"$in": list(VALID_GROUPS)}
-    if pin_gender:
-        filt["gender"] = pin_gender
 
     rows = list(db.age_group.aggregate([
         {"$match": filt},
