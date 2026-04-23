@@ -390,18 +390,32 @@ def export_footfall():
     hour_from, hour_to = get_hour_range()
     store_code = get_store_code()
 
-    docs = list(col.find(
-        {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to), "store_code": store_code}
-    ).sort("date_time", -1).limit(5000))
+    # Aggregate data by hour using MongoDB pipeline
+    pipeline = [
+        {"$match": {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to), "store_code": store_code}},
+        {"$group": {
+            "_id": {
+                "date": {"$substr": ["$date_time", 0, 10]},
+                "hour": {"$substr": ["$date_time", 11, 2]}
+            },
+            "male": {"$sum": {"$convert": {"input": "$count_male", "to": "int", "onError": 0, "onNull": 0}}},
+            "female": {"$sum": {"$convert": {"input": "$count_female", "to": "int", "onError": 0, "onNull": 0}}},
+            "child": {"$sum": {"$convert": {"input": "$count_child", "to": "int", "onError": 0, "onNull": 0}}},
+            "staff": {"$sum": {"$convert": {"input": "$count_staff", "to": "int", "onError": 0, "onNull": 0}}},
+        }},
+        {"$sort": {"_id.date": 1, "_id.hour": 1}}
+    ]
+
+    docs = list(col.aggregate(pipeline))
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = "Footfall"
+    ws.title = "Footfall Hourly"
 
     header_fill = PatternFill("solid", fgColor="DA291C")
     header_font = Font(bold=True, color="FFFFFF", size=11)
 
-    headers = ["Date/Time", "Male", "Female", "Child", "Staff", "Total Visitors"]
+    headers = ["Date", "Hour", "Male", "Female", "Child", "Staff", "Total Visitors"]
     for ci, h in enumerate(headers, 1):
         cell = ws.cell(row=1, column=ci, value=h)
         cell.fill = header_fill
@@ -409,16 +423,20 @@ def export_footfall():
         cell.alignment = Alignment(horizontal="center")
 
     for ri, d in enumerate(docs, 2):
-        m  = int(d.get("count_male",  0) or 0)
-        f_ = int(d.get("count_female",0) or 0)
-        c  = int(d.get("count_child", 0) or 0)
-        s  = int(d.get("count_staff", 0) or 0)
-        ws.cell(row=ri, column=1, value=d.get("date_time", ""))
-        ws.cell(row=ri, column=2, value=m)
-        ws.cell(row=ri, column=3, value=f_)
-        ws.cell(row=ri, column=4, value=c)
-        ws.cell(row=ri, column=5, value=s)
-        ws.cell(row=ri, column=6, value=m + f_ + c)
+        m = d.get("male", 0)
+        f_ = d.get("female", 0)
+        c = d.get("child", 0)
+        s = d.get("staff", 0)
+        date_val = d["_id"]["date"]
+        hour_val = d["_id"]["hour"]
+
+        ws.cell(row=ri, column=1, value=date_val)
+        ws.cell(row=ri, column=2, value=f"{hour_val}:00")
+        ws.cell(row=ri, column=3, value=m)
+        ws.cell(row=ri, column=4, value=f_)
+        ws.cell(row=ri, column=5, value=c)
+        ws.cell(row=ri, column=6, value=s)
+        ws.cell(row=ri, column=7, value=m + f_ + c)
 
     for i, col_dim in enumerate(ws.columns, 1):
         ws.column_dimensions[get_column_letter(i)].width = 18
@@ -429,7 +447,7 @@ def export_footfall():
     return Response(
         buf.read(),
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment;filename=spar_footfall_{date_from}_{date_to}.xlsx"}
+        headers={"Content-Disposition": f"attachment;filename=spar_footfall_hourly_{date_from}_{date_to}.xlsx"}
     )
 
 # ─────────────────────────────────────────────
