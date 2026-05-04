@@ -54,17 +54,6 @@ SPAR Dashboard{% endblock %}
     </div>
   </div>
 
-  <!-- Row 3: Active filter strip (hidden when empty) -->
-  <div id="filterStrip" style="display:none;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;flex-shrink:0;
-    background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:6px 12px;">
-    <span style="font-size:10.5px;font-weight:600;color:#92400e;">
-      <i class="fa-solid fa-filter" style="font-size:9px;"></i> Active filters:
-    </span>
-    <span id="filterChipsList" style="display:contents;"></span>
-    <button onclick="clearAllFilters()" style="margin-left:4px;font-size:10.5px;padding:2px 8px;
-      border-radius:4px;border:1px solid #fcd34d;background:#fff8;cursor:pointer;
-      color:#92400e;font-family:inherit;font-weight:500;">Clear all</button>
-  </div>
 
   <!-- Charts: two equal rows -->
   <div style="flex:1;min-height:400px;display:flex;flex-direction:column;gap:12px;">
@@ -195,49 +184,6 @@ SPAR Dashboard{% endblock %}
   let trendChart, breakdownChart, hourlyChart, ageChart;
   let isDefaultLoad = true;
 
-  // ── Cross-chart filter state ─────────────────────────────────────────────────
-  const F = { date: null, hour: null, gender: null, age: null };
-
-  function toggleFilter(key, val) {
-    F[key] = (F[key] === val) ? null : val;
-    renderFilterStrip();
-    loadAll();
-  }
-  function clearFilter(key) {
-    F[key] = null;
-    renderFilterStrip();
-    loadAll();
-  }
-  function clearAllFilters() {
-    F.date = F.hour = F.gender = F.age = null;
-    renderFilterStrip();
-    loadAll();
-  }
-  function pinParams() {
-    let s = '';
-    if (F.date) s += `&pin_date=${F.date}`;
-    if (F.hour !== null) s += `&pin_hour=${F.hour}`;
-    if (F.gender) s += `&pin_gender=${F.gender}`;
-    if (F.age) s += `&pin_age=${F.age}`;
-    return s;
-  }
-  function renderFilterStrip() {
-    const strip = document.getElementById('filterStrip');
-    const list = document.getElementById('filterChipsList');
-    const active = [];
-    if (F.date) active.push({ key: 'date', label: `Date: ${F.date.slice(5)}` });
-    if (F.hour !== null) active.push({ key: 'hour', label: `Hour: ${String(F.hour).padStart(2, '0')}:00` });
-    if (F.gender) active.push({ key: 'gender', label: `Gender: ${F.gender[0].toUpperCase() + F.gender.slice(1)}` });
-    if (F.age) active.push({ key: 'age', label: `Age: ${F.age}` });
-    strip.style.display = active.length ? 'flex' : 'none';
-    list.innerHTML = active.map(f =>
-      `<span onclick="clearFilter('${f.key}')" style="display:inline-flex;align-items:center;gap:4px;
-      padding:2px 8px;background:#FFC72C;color:#1a1a1a;border-radius:20px;font-size:11px;
-      font-weight:600;cursor:pointer;">${f.label}
-      <span style="font-size:9px;opacity:0.75;">✕</span></span>`
-    ).join('');
-  }
-
   // ── Date helpers ─────────────────────────────────────────────────────────────
   function todayStr() { return new Date().toISOString().slice(0, 10); }
   function offsetDate(days) {
@@ -280,12 +226,8 @@ SPAR Dashboard{% endblock %}
     const storeCode = window.currentStoreCode || 'Spar-20016-TSM-Mall-Udupi';
     return `from=${from}&to=${to}&hour_from=${hourFrom}&hour_to=${hourTo}&store_code=${storeCode}`;
   }
-  function allParams() { return getDateParams() + pinParams(); }
+  function allParams() { return getDateParams(); }
 
-  // ── Cursor helper ────────────────────────────────────────────────────────────
-  function pointerOnHover(evt, active) {
-    evt.native.target.style.cursor = active.length ? 'pointer' : 'default';
-  }
 
   // ── Overview (KPIs + breakdown) ───────────────────────────────────────────────
   async function loadOverview() {
@@ -334,13 +276,8 @@ SPAR Dashboard{% endblock %}
     try {
       const res = await fetch(`/api/trend?${allParams()}`);
       trendData = await res.json();
-      // Update title
       const titleEl = document.getElementById('trendTitle');
-      if (trendData.mode === 'hourly') {
-        titleEl.innerHTML = `<i class="fa-solid fa-chart-column" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>Hourly — ${F.date}`;
-      } else {
-        titleEl.innerHTML = `<i class="fa-solid fa-chart-line" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>Daily Visitor Trend`;
-      }
+      titleEl.innerHTML = `<i class="fa-solid fa-chart-line" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>Daily Visitor Trend`;
       renderTrendChart(activeTrendMode);
     } catch (e) { }
   }
@@ -356,45 +293,29 @@ SPAR Dashboard{% endblock %}
     if (trendChart) trendChart.destroy();
     const data     = mode === 'visitors' ? trendData.visitors : trendData.staff;
     const color    = mode === 'visitors' ? '#DA291C' : '#16a37a';
-    const isHourly = trendData.mode === 'hourly';
-
-    const dispLabels = isHourly
-      ? trendData.labels.map(l => l + ':00')
-      : trendData.labels.map(l => l.slice(5));
-
-    // Peak highlighting for hourly bar chart
-    const peak = isHourly ? Math.max(...(data.filter(v => v > 0))) : 0;
-    const barColors = isHourly
-      ? data.map((v, i) => F.hour !== null
-          ? (i === F.hour ? color : color + '40')
-          : (v === peak ? color : color + '88'))
-      : null;
-
-    // Gradient fill for line chart
-    const grad = isHourly ? null : lineGradient(ctx, color, canvas.offsetHeight || 220);
-
-    const yRange = isHourly ? {} : dynamicYRange(data);
+    const dispLabels = trendData.labels.map(l => l.slice(5));
+    const grad = lineGradient(ctx, color, canvas.offsetHeight || 220);
+    const yRange = dynamicYRange(data);
 
     trendChart = new Chart(ctx, {
-      type: isHourly ? 'bar' : 'line',
+      type: 'line',
       data: {
         labels: dispLabels,
         datasets: [{
           label: mode === 'visitors' ? 'Visitors' : 'Staff',
           data,
           borderColor: color,
-          backgroundColor: isHourly ? barColors : grad,
-          fill: !isHourly,
+          backgroundColor: grad,
+          fill: true,
           tension: 0.42,
-          pointRadius: isHourly ? 0 : (data.length > 20 ? 2 : 4),
+          pointRadius: data.length > 20 ? 2 : 4,
           pointBackgroundColor: color,
           pointBorderColor: '#fff',
           pointBorderWidth: 1.5,
-          pointHitRadius: isHourly ? 0 : 14,
+          pointHitRadius: 14,
           pointHoverRadius: 7,
           pointHoverBackgroundColor: color,
-          borderWidth: isHourly ? 0 : 2.5,
-          borderRadius: isHourly ? 6 : 0,
+          borderWidth: 2.5,
           borderSkipped: false,
         }]
       },
@@ -405,7 +326,7 @@ SPAR Dashboard{% endblock %}
         scales: {
           x: {
             grid: { display: false },
-            ticks: { font: { size: 10 }, maxTicksLimit: isHourly ? 12 : 10, color: '#8492a6' }
+            ticks: { font: { size: 10 }, maxTicksLimit: 10, color: '#8492a6' }
           },
           y: {
             grid: { color: '#f0f0f0' },
@@ -413,8 +334,6 @@ SPAR Dashboard{% endblock %}
             ...yRange,
           }
         },
-        onClick: () => {},
-        onHover: (evt) => { evt.native.target.style.cursor = 'default'; },
       }
     });
   }
@@ -423,27 +342,19 @@ SPAR Dashboard{% endblock %}
   function renderBreakdownChart(b) {
     const ctx = document.getElementById('breakdownChart').getContext('2d');
     if (breakdownChart) breakdownChart.destroy();
-    const GENDERS = ['male', 'female', 'child'];
     const BASE = ['#DA291C', '#7c3aed', '#FFC72C'];
     const male = b.male || 0;
     const female = b.female || 0;
     const child = b.child || 0;
 
-    // Dim non-selected segments when a gender filter is active
-    const colors = BASE.map((c, i) =>
-      F.gender && F.gender !== GENDERS[i] ? c + '28' : c
-    );
-
-    // Show note when breakdown is sourced from age_group collection
-    document.getElementById('breakdownNote').textContent =
-      F.age ? `(from age group ${F.age})` : '';
+    document.getElementById('breakdownNote').textContent = '';
 
     const total = male + female + child;
     breakdownChart = new Chart(ctx, {
       type: 'doughnut',
       data: {
         labels: ['Male', 'Female', 'Child'],
-        datasets: [{ data: [male, female, child], backgroundColor: colors, borderWidth: 2.5, borderColor: '#fff', hoverOffset: 6 }]
+        datasets: [{ data: [male, female, child], backgroundColor: BASE, borderWidth: 2.5, borderColor: '#fff', hoverOffset: 6 }]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
@@ -462,11 +373,6 @@ SPAR Dashboard{% endblock %}
           centerText: false
         },
         cutout: '68%',
-        onClick: (evt, elements) => {
-          if (!elements.length) return;
-          toggleFilter('gender', GENDERS[elements[0].index]);
-        },
-        onHover: pointerOnHover,
       }
     });
   }
@@ -474,19 +380,11 @@ SPAR Dashboard{% endblock %}
   // ── Hourly Chart ──────────────────────────────────────────────────────────────
   async function loadHourly() {
     try {
-      let params = allParams();
-      if (isDefaultLoad && !F.date) {
-        params += `&pin_date=${todayStr()}`;
-      }
-      const res = await fetch(`/api/hourly?${params}`);
+      const res = await fetch(`/api/hourly?${allParams()}`);
       const d = await res.json();
       // Update title
       const titleEl = document.getElementById('hourlyTitle');
-      if (d.pin_date) {
-        titleEl.innerHTML = `<i class="fa-solid fa-clock" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>Hourly Footfall — ${d.pin_date}`;
-      } else {
-        titleEl.innerHTML = `<i class="fa-solid fa-clock" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>Avg Hourly Footfall`;
-      }
+      titleEl.innerHTML = `<i class="fa-solid fa-clock" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>Avg Hourly Footfall`;
       renderHourlyChart(d);
     } catch (e) { }
   }
@@ -504,10 +402,7 @@ SPAR Dashboard{% endblock %}
         datasets: [{
           label: d.is_avg ? 'Avg Visitors' : 'Visitors',
           data: d.values,
-          backgroundColor: d.labels.map((_, i) => {
-            if (F.hour !== null) return i === F.hour ? BASE + 'EE' : BASE + '30';
-            return d.values[i] === peak ? BASE + 'EE' : BASE + '88';
-          }),
+          backgroundColor: d.values.map((v) => v === peak ? BASE + 'EE' : BASE + '88'),
           borderRadius: 6,
           borderSkipped: false,
         }]
@@ -524,11 +419,6 @@ SPAR Dashboard{% endblock %}
             ...yRange,
           }
         },
-        onClick: (evt, elements) => {
-          if (!elements.length) return;
-          toggleFilter('hour', elements[0].index);
-        },
-        onHover: pointerOnHover,
       }
     });
   }
@@ -545,7 +435,7 @@ SPAR Dashboard{% endblock %}
   function renderAgeChart(buckets) {
     const ctx = document.getElementById('ageChart').getContext('2d');
     if (ageChart) ageChart.destroy();
-    
+
     // Handle empty data
     const parent = ctx.canvas.parentNode;
     let noDataMsg = parent.querySelector('.no-data-msg');
@@ -566,9 +456,7 @@ SPAR Dashboard{% endblock %}
     }
 
     const BASE = ['#DA291C', '#7c3aed', '#FFC72C', '#16a37a', '#8492a6'];
-    const colors = BASE.slice(0, buckets.length).map((c, i) =>
-      F.age && F.age !== buckets[i].key ? c + '28' : c
-    );
+    const colors = BASE.slice(0, buckets.length);
     const ageTotal = buckets.reduce((s, b) => s + b.count, 0);
     ageChart = new Chart(ctx, {
       type: 'doughnut',
@@ -593,11 +481,6 @@ SPAR Dashboard{% endblock %}
           centerText: false
         },
         cutout: '65%',
-        onClick: (evt, elements) => {
-          if (!elements.length) return;
-          toggleFilter('age', ageData[elements[0].index].key);
-        },
-        onHover: pointerOnHover,
       }
     });
   }
@@ -650,11 +533,6 @@ SPAR Dashboard{% endblock %}
           <div class="chip-row" id="kpiChips">
             <div class="spinner" style="width:18px;height:18px;border-width:2px;margin:0;"></div>
           </div>
-        </div>
-        <div id="filterStrip" style="display:none;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;flex-shrink:0;background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:6px 12px;">
-          <span style="font-size:10.5px;font-weight:600;color:#92400e;"><i class="fa-solid fa-filter" style="font-size:9px;"></i> Active filters:</span>
-          <span id="filterChipsList" style="display:contents;"></span>
-          <button onclick="clearAllFilters()" style="margin-left:4px;font-size:10.5px;padding:2px 8px;border-radius:4px;border:1px solid #fcd34d;background:#fff8;cursor:pointer;color:#92400e;font-family:inherit;font-weight:500;">Clear all</button>
         </div>
         <div style="flex:1;min-height:400px;display:flex;flex-direction:column;gap:12px;">
           <div style="display:grid;grid-template-columns:1.8fr 1fr;gap:12px;flex:1;min-height:0;">

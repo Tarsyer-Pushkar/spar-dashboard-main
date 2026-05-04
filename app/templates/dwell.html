@@ -1,0 +1,588 @@
+{% extends "base.html" %}
+{% block title %}Dwell Time Analysis{% endblock %}
+{% block page_title %}<i class="fa-solid fa-hourglass-half" style="color:var(--primary);margin-right:8px"></i>Dwell Time Analysis{% endblock %}
+
+{% block head %}
+<style>
+  /* ── DWELL PAGE EXTRAS ── */
+  .kpi-total {
+    border-left-color: #3b7dd8;
+  }
+  .kpi-lt2 {
+    border-left-color: #16a37a;
+  }
+  .kpi-b2_10 {
+    border-left-color: #d97706;
+  }
+  .kpi-gt10 {
+    border-left-color: #DA291C;
+  }
+
+  .dwell-legend {
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .dwell-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .dwell-legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .load-msg {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .pct-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+  .pct-badge-green  { background: #d1fae5; color: #059669; }
+  .pct-badge-yellow { background: #fef3c7; color: #d97706; }
+  .pct-badge-red    { background: #fee2e2; color: #dc2626; }
+
+  /* Stacked bar mini chart for table */
+  .dwell-stack {
+    display: flex;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 4px;
+    background: var(--border);
+  }
+  .dwell-stack-seg {
+    height: 100%;
+    transition: width .4s;
+  }
+
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- FILTER BAR -->
+<div class="filter-bar">
+  <label>From</label>
+  <input type="date" id="f-from" />
+  <label>To</label>
+  <input type="date" id="f-to" />
+  <label>Hour</label>
+  <select id="hourFrom"
+    style="padding:5px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;font-family:inherit;color:#374151;"></select>
+  <span style="color:var(--muted);font-size:12px;">–</span>
+  <select id="hourTo"
+    style="padding:5px 6px;border:1px solid #d1d5db;border-radius:6px;font-size:12px;font-family:inherit;color:#374151;"></select>
+  <button class="btn btn-primary" onclick="loadAll()">
+    <i class="fa-solid fa-rotate"></i> Apply
+  </button>
+  <button class="quick-btn" onclick="setRange(0)">Today</button>
+  <button class="quick-btn" onclick="setYesterday()">Yesterday</button>
+  <button class="quick-btn" onclick="setRange(6)">7 Days</button>
+  <button class="quick-btn active" id="btn30" onclick="setRange(29)">30 Days</button>
+  <button class="quick-btn" onclick="setRange(89)">90 Days</button>
+  <div style="margin-left:auto; display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted);">
+    <i class="fa-solid fa-circle-info" style="font-size:12px;"></i>
+    Customer dwell time distribution
+  </div>
+</div>
+
+<!-- SCROLLABLE CONTENT -->
+<div class="content" id="mainContent">
+
+  <!-- KPI STAT CARDS -->
+  <div class="stats-row" style="margin-bottom:12px;" id="kpi-row">
+    <div class="stat-card kpi-total">
+      <div class="stat-label">Total Observations</div>
+      <div class="stat-value" id="kpi-total">—</div>
+      <div class="stat-sub">all dwell categories</div>
+    </div>
+    <div class="stat-card kpi-lt2">
+      <div class="stat-label">< 2 Minutes</div>
+      <div class="stat-value" id="kpi-lt2">—</div>
+      <div class="stat-sub" id="kpi-lt2-pct"></div>
+    </div>
+    <div class="stat-card kpi-b2_10">
+      <div class="stat-label">2 – 10 Minutes</div>
+      <div class="stat-value" id="kpi-b2_10">—</div>
+      <div class="stat-sub" id="kpi-b2_10-pct"></div>
+    </div>
+    <div class="stat-card kpi-gt10">
+      <div class="stat-label">> 10 Minutes</div>
+      <div class="stat-value" id="kpi-gt10">—</div>
+      <div class="stat-sub" id="kpi-gt10-pct"></div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW 1: Daily Stacked Trend + Distribution Donut -->
+  <div class="grid-2" style="margin-bottom:12px;">
+    <div class="card" style="display:flex;flex-direction:column;min-height:220px;">
+      <div class="card-title" style="margin-bottom:4px;">
+        <i class="fa-solid fa-chart-area" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>
+        Daily Dwell Time Trend
+      </div>
+      <div class="dwell-legend">
+        <div class="dwell-legend-item"><div class="dwell-legend-dot" style="background:#16a37a;"></div> < 2 min</div>
+        <div class="dwell-legend-item"><div class="dwell-legend-dot" style="background:#d97706;"></div> 2–10 min</div>
+        <div class="dwell-legend-item"><div class="dwell-legend-dot" style="background:#DA291C;"></div> > 10 min</div>
+      </div>
+      <div style="flex:1;position:relative;min-height:0;">
+        <canvas id="dailyTrendChart"
+          style="position:absolute;inset:0;width:100%!important;height:100%!important;"></canvas>
+      </div>
+    </div>
+
+    <div class="card" style="display:flex;flex-direction:column;min-height:220px;">
+      <div class="card-title">
+        <i class="fa-solid fa-chart-pie" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>
+        Dwell Distribution
+      </div>
+      <div style="flex:1;position:relative;min-height:0;">
+        <canvas id="distributionChart"
+          style="position:absolute;inset:0;width:100%!important;height:100%!important;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHARTS ROW 2: Hourly Pattern -->
+  <div style="margin-bottom:12px;">
+    <div class="card" style="display:flex;flex-direction:column;min-height:220px;">
+      <div class="card-title" style="margin-bottom:4px;">
+        <i class="fa-solid fa-clock" style="color:var(--primary);margin-right:6px;font-size:11px;"></i>
+        Avg Hourly Dwell Pattern
+      </div>
+      <div class="dwell-legend">
+        <div class="dwell-legend-item"><div class="dwell-legend-dot" style="background:#16a37a;"></div> < 2 min</div>
+        <div class="dwell-legend-item"><div class="dwell-legend-dot" style="background:#d97706;"></div> 2–10 min</div>
+        <div class="dwell-legend-item"><div class="dwell-legend-dot" style="background:#DA291C;"></div> > 10 min</div>
+      </div>
+      <div style="flex:1;position:relative;min-height:0;">
+        <canvas id="hourlyChart"
+          style="position:absolute;inset:0;width:100%!important;height:100%!important;"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- DAILY BREAKDOWN TABLE -->
+  <div class="card" style="margin-bottom:10px;">
+    <div class="card-title" style="margin-bottom:12px;">
+      <i class="fa-solid fa-table-list" style="color:var(--muted);margin-right:5px;"></i>
+      Daily Dwell Breakdown
+    </div>
+    <div class="table-wrap" id="table-wrap">
+      <div class="load-msg">
+        <div class="spinner"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /content -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // ── Chart instances ──
+  let dailyTrendChart, distributionChart, hourlyChart;
+
+  // ── Color palette ──
+  const CLR_LT2  = '#16a37a';
+  const CLR_B210 = '#d97706';
+  const CLR_GT10 = '#DA291C';
+
+  // ── Gradient helper ──
+  function makeGradient(ctx, color, height) {
+    const g = ctx.createLinearGradient(0, 0, 0, height);
+    g.addColorStop(0, color + '66');
+    g.addColorStop(0.6, color + '22');
+    g.addColorStop(1, color + '00');
+    return g;
+  }
+
+  // ── Dynamic Y range ──
+  function dynamicYRange(values, padFraction = 0.25) {
+    const valid = (values || []).filter(v => v !== null && v !== undefined && !isNaN(v) && v > 0);
+    if (!valid.length) return {};
+    const lo = Math.min(...valid), hi = Math.max(...valid);
+    const span = hi - lo, mean = valid.reduce((a, b) => a + b, 0) / valid.length;
+    const eff = span < mean * 0.05 ? mean * 0.3 : span;
+    const pad = eff * padFraction;
+    return { min: Math.max(0, lo - pad), max: hi + pad };
+  }
+
+  // ── Date helpers ──
+  function todayStr() { return new Date().toISOString().slice(0, 10); }
+  function offsetDate(days) {
+    const d = new Date(); d.setDate(d.getDate() - days);
+    return d.toISOString().slice(0, 10);
+  }
+  function setRange(daysBack) {
+    document.getElementById('f-from').value = offsetDate(daysBack);
+    document.getElementById('f-to').value = todayStr();
+    document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    loadAll();
+  }
+  function setYesterday() {
+    const y = offsetDate(1);
+    document.getElementById('f-from').value = y;
+    document.getElementById('f-to').value = y;
+    document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    loadAll();
+  }
+
+  function getQueryString() {
+    const from = document.getElementById('f-from').value;
+    const to = document.getElementById('f-to').value;
+    const hf = document.getElementById('hourFrom').value;
+    const ht = document.getElementById('hourTo').value;
+    const store = window.currentStoreCode || '';
+    return `from=${from}&to=${to}&hour_from=${hf}&hour_to=${ht}&store_code=${store}`;
+  }
+
+  // ── Destroy & recreate chart helper ──
+  function makeChart(id, config) {
+    const ctx = document.getElementById(id);
+    if (!ctx) return null;
+    const existing = Chart.getChart(ctx);
+    if (existing) existing.destroy();
+    return new Chart(ctx, config);
+  }
+
+  // ── Common chart options ──
+  const BASE_OPTS = {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 600, easing: 'easeOutQuart' },
+    plugins: {
+      legend: { display: false },
+      tooltip: { mode: 'index', intersect: false }
+    },
+    scales: {
+      x: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 10 }, color: '#8492a6' } },
+      y: { grid: { color: 'rgba(0,0,0,0.04)' }, ticks: { font: { size: 10 }, color: '#8492a6' }, beginAtZero: true }
+    }
+  };
+
+  // ── Percentage helper ──
+  function pct(val, total) {
+    if (!total) return '0%';
+    return ((val / total) * 100).toFixed(1) + '%';
+  }
+
+  // ── Update KPI cards ──
+  function updateKPIs(d) {
+    const total = d.grand_total || 0;
+    document.getElementById('kpi-total').textContent = total.toLocaleString();
+    document.getElementById('kpi-lt2').textContent = (d.total_lt2 || 0).toLocaleString();
+    document.getElementById('kpi-b2_10').textContent = (d.total_b2_10 || 0).toLocaleString();
+    document.getElementById('kpi-gt10').textContent = (d.total_gt10 || 0).toLocaleString();
+
+    document.getElementById('kpi-lt2-pct').innerHTML =
+      `<span class="pct-badge pct-badge-green">${pct(d.total_lt2, total)}</span> of total`;
+    document.getElementById('kpi-b2_10-pct').innerHTML =
+      `<span class="pct-badge pct-badge-yellow">${pct(d.total_b2_10, total)}</span> of total`;
+    document.getElementById('kpi-gt10-pct').innerHTML =
+      `<span class="pct-badge pct-badge-red">${pct(d.total_gt10, total)}</span> of total`;
+  }
+
+  // ── Build Daily Stacked Area Chart ──
+  function buildDailyTrend(d) {
+    const canvas = document.getElementById('dailyTrendChart');
+    const ctx = canvas.getContext('2d');
+    const dispLabels = d.labels.map(l => l.slice(5));  // MM-DD
+
+    dailyTrendChart = makeChart('dailyTrendChart', {
+      type: 'bar',
+      data: {
+        labels: dispLabels,
+        datasets: [
+          {
+            label: '< 2 min',
+            data: d.lt2,
+            backgroundColor: CLR_LT2 + 'CC',
+            borderColor: CLR_LT2,
+            borderWidth: 0,
+            borderRadius: { topLeft: 0, topRight: 0 },
+            borderSkipped: false,
+          },
+          {
+            label: '2–10 min',
+            data: d.b2_10,
+            backgroundColor: CLR_B210 + 'CC',
+            borderColor: CLR_B210,
+            borderWidth: 0,
+            borderSkipped: false,
+          },
+          {
+            label: '> 10 min',
+            data: d.gt10,
+            backgroundColor: CLR_GT10 + 'CC',
+            borderColor: CLR_GT10,
+            borderWidth: 0,
+            borderRadius: { topLeft: 4, topRight: 4 },
+            borderSkipped: false,
+          },
+        ]
+      },
+      options: {
+        ...BASE_OPTS,
+        plugins: {
+          ...BASE_OPTS.plugins,
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: {
+              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()}`
+            }
+          }
+        },
+        scales: {
+          x: {
+            ...BASE_OPTS.scales.x,
+            stacked: true,
+            ticks: { ...BASE_OPTS.scales.x.ticks, maxTicksLimit: 12 }
+          },
+          y: {
+            ...BASE_OPTS.scales.y,
+            stacked: true,
+          }
+        },
+      }
+    });
+  }
+
+  // ── Build Distribution Donut ──
+  function buildDistribution(d) {
+    const total = d.grand_total || 0;
+    distributionChart = makeChart('distributionChart', {
+      type: 'doughnut',
+      data: {
+        labels: ['< 2 min', '2–10 min', '> 10 min'],
+        datasets: [{
+          data: [d.total_lt2, d.total_b2_10, d.total_gt10],
+          backgroundColor: [CLR_LT2, CLR_B210, CLR_GT10],
+          borderWidth: 2.5,
+          borderColor: '#fff',
+          hoverOffset: 6,
+        }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 700, easing: 'easeOutQuart' },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { font: { size: 11 }, padding: 10, boxWidth: 10, usePointStyle: true }
+          },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const tot = ctx.dataset.data.reduce((a, b) => a + b, 0);
+                const val = ctx.raw.toLocaleString();
+                const p = tot ? ((ctx.raw / tot) * 100).toFixed(1) : 0;
+                return ` ${ctx.label}: ${val} (${p}%)`;
+              }
+            }
+          },
+        },
+        cutout: '66%',
+      }
+    });
+  }
+
+  // ── Build Hourly Stacked Bar Chart ──
+  function buildHourly(d) {
+    hourlyChart = makeChart('hourlyChart', {
+      type: 'bar',
+      data: {
+        labels: d.hourly_labels,
+        datasets: [
+          {
+            label: '< 2 min',
+            data: d.hourly_lt2,
+            backgroundColor: CLR_LT2 + 'CC',
+            borderWidth: 0,
+            borderSkipped: false,
+          },
+          {
+            label: '2–10 min',
+            data: d.hourly_b2_10,
+            backgroundColor: CLR_B210 + 'CC',
+            borderWidth: 0,
+            borderSkipped: false,
+          },
+          {
+            label: '> 10 min',
+            data: d.hourly_gt10,
+            backgroundColor: CLR_GT10 + 'CC',
+            borderWidth: 0,
+            borderRadius: { topLeft: 4, topRight: 4 },
+            borderSkipped: false,
+          },
+        ]
+      },
+      options: {
+        ...BASE_OPTS,
+        plugins: {
+          ...BASE_OPTS.plugins,
+          tooltip: {
+            mode: 'index', intersect: false,
+            callbacks: {
+              label: (ctx) => ` ${ctx.dataset.label}: ${ctx.raw.toLocaleString()}`
+            }
+          }
+        },
+        scales: {
+          x: { ...BASE_OPTS.scales.x, stacked: true },
+          y: { ...BASE_OPTS.scales.y, stacked: true },
+        },
+      }
+    });
+  }
+
+  // ── Build daily breakdown table ──
+  function buildTable(d) {
+    const wrap = document.getElementById('table-wrap');
+    if (!d.labels || d.labels.length === 0) {
+      wrap.innerHTML = '<div class="load-msg">No data for selected period.</div>';
+      return;
+    }
+
+    let rows = d.labels.map((date, i) => {
+      const lt2v = d.lt2[i] || 0;
+      const b210v = d.b2_10[i] || 0;
+      const gt10v = d.gt10[i] || 0;
+      const dayTotal = lt2v + b210v + gt10v;
+      const lt2p = dayTotal ? (lt2v / dayTotal * 100).toFixed(1) : 0;
+      const b210p = dayTotal ? (b210v / dayTotal * 100).toFixed(1) : 0;
+      const gt10p = dayTotal ? (gt10v / dayTotal * 100).toFixed(1) : 0;
+      const engagement = dayTotal ? ((b210v + gt10v) / dayTotal * 100).toFixed(1) : 0;
+
+      const engClass = engagement >= 60 ? 'pct-badge-green' : (engagement >= 30 ? 'pct-badge-yellow' : 'pct-badge-red');
+
+      return `<tr>
+        <td style="font-weight:500;">${date}</td>
+        <td class="num" style="color:${CLR_LT2};font-weight:600;">${lt2v.toLocaleString()}</td>
+        <td class="num" style="color:${CLR_B210};font-weight:600;">${b210v.toLocaleString()}</td>
+        <td class="num" style="color:${CLR_GT10};font-weight:600;">${gt10v.toLocaleString()}</td>
+        <td class="num" style="font-weight:600;">${dayTotal.toLocaleString()}</td>
+        <td>
+          <div class="dwell-stack">
+            <div class="dwell-stack-seg" style="width:${lt2p}%;background:${CLR_LT2};"></div>
+            <div class="dwell-stack-seg" style="width:${b210p}%;background:${CLR_B210};"></div>
+            <div class="dwell-stack-seg" style="width:${gt10p}%;background:${CLR_GT10};"></div>
+          </div>
+        </td>
+        <td class="num"><span class="pct-badge ${engClass}">${engagement}%</span></td>
+      </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th style="text-align:right;">< 2 min</th>
+          <th style="text-align:right;">2–10 min</th>
+          <th style="text-align:right;">> 10 min</th>
+          <th style="text-align:right;">Total</th>
+          <th>Distribution</th>
+          <th style="text-align:right;">Engagement</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  }
+
+  // ── Main load function ──
+  function loadAll() {
+    if (!window.currentStoreCode) {
+      showNoStoreMessage();
+      return;
+    }
+
+    // Show loading
+    document.getElementById('table-wrap').innerHTML =
+      '<div class="load-msg"><div class="spinner"></div></div>';
+
+    fetch(`/api/dwell?${getQueryString()}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) {
+          document.getElementById('table-wrap').innerHTML =
+            `<div class="load-msg" style="color:var(--red);">${d.error}</div>`;
+          return;
+        }
+        updateKPIs(d);
+        buildDailyTrend(d);
+        buildDistribution(d);
+        buildHourly(d);
+
+        buildTable(d);
+      })
+      .catch(err => {
+        console.error('Dwell stats error:', err);
+        document.getElementById('table-wrap').innerHTML =
+          '<div class="load-msg" style="color:var(--red);">Failed to load data. Please try again.</div>';
+      });
+  }
+
+  // ── Show no store selected message ──
+  function showNoStoreMessage() {
+    const content = document.getElementById('mainContent');
+    content.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: center; height: 100%; flex-direction: column; gap: 16px; color: var(--muted);">
+        <i class="fa-solid fa-store" style="font-size: 48px; opacity: 0.3;"></i>
+        <div style="font-size: 14px; font-weight: 500;">Please select a store to view dwell time data</div>
+      </div>
+    `;
+  }
+
+  // ── Init ──
+  (function init() {
+    // Populate hour selects
+    const hf = document.getElementById('hourFrom');
+    const ht = document.getElementById('hourTo');
+    for (let h = 9; h <= 22; h++) {
+      const label = String(h).padStart(2, '0') + ':00';
+      hf.add(new Option(label, h));
+      ht.add(new Option(label, h));
+    }
+    hf.value = 9;
+    ht.value = 22;
+
+    // Default dates: last 30 days
+    document.getElementById('f-from').value = offsetDate(29);
+    document.getElementById('f-to').value = todayStr();
+
+    // Wait for store code to be initialized
+    const checkStoreInterval = setInterval(() => {
+      if (window.currentStoreCode !== undefined) {
+        clearInterval(checkStoreInterval);
+        loadAll();
+      }
+    }, 50);
+
+    // Also monitor store code changes
+    const storeDropdown = document.getElementById('globalStoreCode');
+    storeDropdown.addEventListener('change', loadAll);
+  })();
+</script>
+{% endblock %}

@@ -280,6 +280,10 @@
     <i class="fa-solid fa-clock"></i> Queue &amp; Wait
   </a>
   <div class="nav-sep"></div>
+  <a href="/dwell" class="nav-item {% if request.path == '/dwell' %}active{% endif %}" id="navDwell">
+    <i class="fa-solid fa-hourglass-half"></i> Dwell Time
+  </a>
+  <div class="nav-sep"></div>
   <a href="/devices" class="nav-item {% if request.path == '/devices' %}active{% endif %}" id="navDevices">
     <i class="fa-solid fa-heart-pulse"></i> Device Health
   </a>
@@ -327,7 +331,7 @@
 
   // Update navigation links with store code
   function updateNavLinks(storeCode) {
-    const links = ['navOverview', 'navHeatmap', 'navQueue', 'navDevices'];
+    const links = ['navOverview', 'navHeatmap', 'navQueue', 'navDwell', 'navDevices'];
     links.forEach(id => {
       const link = document.getElementById(id);
       if (link) {

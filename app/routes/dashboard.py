@@ -30,3 +30,8 @@ def heatmap():
 @login_required
 def queue():
     return render_template("queue.html")
+
+@dashboard_bp.route("/dwell")
+@login_required
+def dwell():
+    return render_template("dwell.html")
