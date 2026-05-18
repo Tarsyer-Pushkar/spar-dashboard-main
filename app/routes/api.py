@@ -255,7 +255,7 @@ def hourly():
         {"$convert": {"input": "$count_child", "to": "int", "onError": 0, "onNull": 0}}
     ]}
 
-    gc_expr = {"$convert": {"input": "$fps", "to": "int", "onError": 0, "onNull": 0}}
+    gc_expr = {"$convert": {"input": "$group_count", "to": "int", "onError": 0, "onNull": 0}}
     group_map = {f"{h:02d}": 0 for h in range(hour_from, hour_to + 1)}
 
     rows = list(col.aggregate([
