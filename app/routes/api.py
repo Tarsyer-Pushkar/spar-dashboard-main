@@ -255,23 +255,29 @@ def hourly():
         {"$convert": {"input": "$count_child", "to": "int", "onError": 0, "onNull": 0}}
     ]}
 
+    gc_expr = {"$convert": {"input": "$group_count", "to": "int", "onError": 0, "onNull": 0}}
+    group_map = {f"{h:02d}": 0 for h in range(hour_from, hour_to + 1)}
+
     rows = list(col.aggregate([
         {"$match": {**str_date_filter(date_from, date_to_ex), **hour_expr_str(hour_from, hour_to), "store_code": store_code}},
         {"$group": {
-            "_id":   {"$substr": ["$date_time", 11, 2]},
-            "total": {"$sum": vis_expr},
-            "dates": {"$addToSet": {"$substr": ["$date_time", 0, 10]}},
+            "_id":          {"$substr": ["$date_time", 11, 2]},
+            "total":        {"$sum": vis_expr},
+            "group_total":  {"$sum": gc_expr},
+            "dates":        {"$addToSet": {"$substr": ["$date_time", 0, 10]}},
         }},
         {"$sort": {"_id": 1}}
     ]))
     for r in rows:
         if r["_id"] in hour_map:
             n = len(r["dates"])
-            hour_map[r["_id"]] = round(r["total"] / n) if n else 0
+            hour_map[r["_id"]]   = round(r["total"]       / n) if n else 0
+            group_map[r["_id"]]  = round(r["group_total"] / n) if n else 0
 
-    labels = [f"{h:02d}:00" for h in range(hour_from, hour_to + 1)]
-    values = [hour_map[f"{h:02d}"] for h in range(hour_from, hour_to + 1)]
-    return jsonify({"labels": labels, "values": values,
+    labels       = [f"{h:02d}:00" for h in range(hour_from, hour_to + 1)]
+    values       = [hour_map[f"{h:02d}"]  for h in range(hour_from, hour_to + 1)]
+    group_counts = [group_map[f"{h:02d}"] for h in range(hour_from, hour_to + 1)]
+    return jsonify({"labels": labels, "values": values, "group_counts": group_counts,
                     "date_from": date_from, "date_to": date_to, "is_avg": True})
 
 # ─────────────────────────────────────────────

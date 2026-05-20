@@ -392,25 +392,42 @@ SPAR Dashboard{% endblock %}
     const ctx = document.getElementById('hourlyChart').getContext('2d');
     if (hourlyChart) hourlyChart.destroy();
     const BASE = '#DA291C';
+    const GC_COLOR = '#2563eb';
     const peak = Math.max(...(d.values.filter(v => v > 0)));
     const yRange = dynamicYRange(d.values);
+    const gcValues = d.group_counts || [];
 
     hourlyChart = new Chart(ctx, {
       type: 'bar',
       data: {
         labels: d.labels,
-        datasets: [{
-          label: d.is_avg ? 'Avg Visitors' : 'Visitors',
-          data: d.values,
-          backgroundColor: d.values.map((v) => v === peak ? BASE + 'EE' : BASE + '88'),
-          borderRadius: 6,
-          borderSkipped: false,
-        }]
+        datasets: [
+          {
+            label: 'Visitors',
+            data: d.values,
+            backgroundColor: d.values.map((v) => v === peak ? BASE + 'EE' : BASE + '88'),
+            borderRadius: 6,
+            borderSkipped: false,
+          },
+          {
+            label: 'Group Count',
+            data: gcValues,
+            backgroundColor: GC_COLOR + '99',
+            borderRadius: 6,
+            borderSkipped: false,
+          }
+        ]
       },
       options: {
         responsive: true, maintainAspectRatio: false,
         animation: { duration: 650, easing: 'easeOutQuart' },
-        plugins: { legend: { display: false } },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: { font: { size: 10 }, boxWidth: 10, padding: 8, usePointStyle: true }
+          }
+        },
         scales: {
           x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 12, color: '#8492a6' } },
           y: {
