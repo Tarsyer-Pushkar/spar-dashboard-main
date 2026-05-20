@@ -586,6 +586,7 @@ def heatmap_table():
     """
     from collections import defaultdict
     import ast
+    import re
 
     dates_param = request.args.get("dates", "")
     dates = [d.strip() for d in dates_param.split(",") if d.strip()]
@@ -636,6 +637,9 @@ def heatmap_table():
         if hour_str not in hours_set:
             continue
         loc = doc.get("store_location", "")
+        # Normalize store_location to match location_map keys:
+        # strip whitespace, lowercase, and zero-pad digits (e.g. "Location1" → "location01")
+        loc = re.sub(r"location(\d+)", lambda m: f"location{int(m.group(1)):02d}", loc.strip().lower())
         if loc not in location_map:
             continue
 
