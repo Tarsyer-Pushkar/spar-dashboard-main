@@ -615,7 +615,7 @@ def heatmap_table():
     filt = or_conditions[0] if len(or_conditions) == 1 else {"$or": or_conditions}
     filt["store_code"] = store_code
 
-    docs = list(col.find(filt, {"date_time": 1, "store_location": 1, "count": 1, "_id": 0}))
+    docs = list(col.find(filt, {"date_time": 1, "store_location": 1, "count": 1, "person_bbox_list": 1, "_id": 0}))
 
     hours     = [f"{h:02d}" for h in range(hour_from, hour_to + 1)]
     hours_set = set(hours)
@@ -643,9 +643,25 @@ def heatmap_table():
         if isinstance(cnt, str):
             try: cnt = ast.literal_eval(cnt)
             except: cnt = {}
+        if not isinstance(cnt, dict):
+            cnt = {}
 
         cats = {cat: int(cnt.get(cat, 0) or 0) for cat in ("male", "female", "child", "staff")}
         total = sum(cats.values())
+
+        # Fallback: if count is empty/zero, check person_bbox_list for actual detections
+        if total == 0:
+            bbl = doc.get("person_bbox_list") or {}
+            if isinstance(bbl, str):
+                try: bbl = ast.literal_eval(bbl)
+                except: bbl = {}
+            if isinstance(bbl, dict):
+                bbox_counts = {cat: len(bbl.get(cat, []) or []) for cat in ("male", "female", "child", "staff")}
+                bbox_total = sum(bbox_counts.values())
+                if bbox_total > 0:
+                    total = bbox_total
+                    cats = bbox_counts
+
         if total > 0:
             presence[loc][hour_str][date_str].add(minute_str)
         for cat, v in cats.items():
